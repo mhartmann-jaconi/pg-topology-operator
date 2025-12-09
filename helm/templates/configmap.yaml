@@ -1,0 +1,24 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "toperator.fullname" . }}
+data:
+  application.yaml: |
+    service:
+      name: {{ include "toperator.fullname" . }}
+      port: 443
+      namespace: {{ .Release.Namespace }}
+    pod:
+      port: {{ .Values.ports.tls }}
+    postgres:
+      selector:
+        {{- toYaml .Values.topology.selector | nindent 8 }}
+      volumes:
+        {{- toYaml  .Values.topology.volumes | nindent 8 }}
+    topology:
+      label_zone: {{ .Values.topology.labels.zone }}
+      label_region: {{ .Values.topology.labels.region }}
+      label_leader: {{ .Values.topology.labels.leader }}
+    log:
+      level: {{ .Values.logging.level }}
+      json: {{ .Values.logging.json }}

@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "toperator.fullname" . }}
+  labels:
+    {{- include "toperator.labels" . | nindent 4 }}
+  {{- with .Values.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "toperator.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "toperator.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          name: manager
+          ports:
+            - containerPort: {{ .Values.ports.http }}
+              name: http
+              protocol: TCP
+            - containerPort: {{ .Values.ports.tls }}
+              name: https
+              protocol: TCP
+          readinessProbe:
+            failureThreshold: 20
+            httpGet:
+              path: /readyz
+              port: {{ .Values.ports.http }}
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 2
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: tls
+              mountPath: "/etc/webhook/certs"
+            - name: config
+              mountPath: "/config"
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      serviceAccountName: {{ include "toperator.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.securityContext | nindent 8 }}
+      terminationGracePeriodSeconds: 10
+      volumes:
+        - name: tls
+          emptyDir:
+            medium: Memory
+        - name: config
+          configMap:
+            name: {{ include "toperator.fullname" . }}

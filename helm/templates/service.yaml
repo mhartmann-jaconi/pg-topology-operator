@@ -1,0 +1,24 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "toperator.fullname" . }}
+  labels:
+    {{- include "toperator.labels" . | nindent 4 }}
+  {{- with .Values.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  internalTrafficPolicy: Cluster
+  ipFamilies:
+    - IPv4
+  ipFamilyPolicy: SingleStack
+  ports:
+    - name: https
+      port: 443
+      protocol: TCP
+      targetPort: {{ .Values.ports.tls }}
+  selector:
+    {{- include "toperator.selectorLabels" . | nindent 4 }}
+  sessionAffinity: None
+  type: ClusterIP

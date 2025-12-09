@@ -1,0 +1,56 @@
+nameOverride: ""
+fullnameOverride: "pg-topology-operator"
+
+serviceAccount:
+  create: true
+  name: pg-topology-operator
+  annotations: {}
+
+service:
+  annotations: {}
+
+annotations: {}
+podAnnotations: {}
+
+replicaCount: 1
+
+image:
+  repository: "jaconi.io/ipoque-pg-webhook"
+  tag: "latest"
+  pullPolicy: "IfNotPresent"
+  pullSecrets: []
+
+topology:
+  volumes:
+    east: nfs-east
+    west: nfs-west
+  labels:
+    zone: topology.kubernetes.io/zone
+    region: topology.kubernetes.io/region
+    leader: zone-leader
+  selector:
+    "kubernetes.io/metadata.name": "default"
+
+ports:
+  http: 8081
+  tls: 9443
+
+resources:
+  limits:
+    cpu: 100m
+    memory: 200Mi
+  requests:
+    cpu: 100m
+    memory: 100Mi
+  
+securityContext: {}
+# capabilities:
+#   drop:
+#   - ALL
+# readOnlyRootFilesystem: true
+# runAsNonRoot: true
+# runAsUser: 1000
+
+logging:
+  level: debug
+  json: "false"

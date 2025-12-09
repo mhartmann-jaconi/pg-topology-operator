@@ -1,0 +1,46 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "toperator.fullname" . }}
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - nodes
+    verbs:
+      - list
+      - get
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+      - persistentvolumeclaims
+    verbs:
+      - list
+      - get
+      - watch
+      - patch
+      - update
+  - apiGroups:
+      - "admissionregistration.k8s.io"
+    resources:
+      - mutatingwebhookconfigurations
+    verbs:
+      - list
+      - get
+      - watch
+      - patch
+      - update
+      - create
+  - apiGroups:
+      - "postgresql.cnpg.io"
+    resources:
+      - clusters
+      - clusters/status
+    verbs:
+      - list
+      - get
+      - watch
+      - patch
+      - update
