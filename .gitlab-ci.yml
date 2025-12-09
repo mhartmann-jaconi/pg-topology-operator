@@ -1,6 +1,5 @@
 
 stages:
-  - prepare
   - build
 
 default:
@@ -24,27 +23,12 @@ variables:
   DOCKER_REGISTRY: "docker.lp.rsint.net"
   DSKUBE_DEST_DIR: "${CI_PROJECT_DIR}/build/deployment/package_and_deploy/dskube"
 
-prepare:
-  stage: prepare
-  image: $KANIKO_IMAGE
-  script:
-    - VERSION_TAG=$(rscom-versioning rscom-version)
-    - echo "VERSION_TAG=${VERSION_TAG}" >> job-variables-setter.env
-    - echo "Docker image will be built with version:" ${VERSION_TAG}
-  artifacts:
-    expire_in: 2 days
-    reports:
-      dotenv: job-variables-setter.env
-  rules:
-    - when: always
-
 build:
   stage: build
   image: $KANIKO_IMAGE
-  needs:
-    - prepare
   before_script:
-    - IMAGE=${DOCKER_REGISTRY}/platform/${APP_NAME}:${VERSION_TAG}
+    # TODO get an actual image tag
+    - IMAGE=${DOCKER_REGISTRY}/platform/${APP_NAME}:latest
     - DOCKER_FILE=${CI_PROJECT_DIR}/Dockerfile
   script:
     - echo "Push OCI image to registry ${IMAGE}"
