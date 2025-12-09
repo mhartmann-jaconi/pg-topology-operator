@@ -1,9 +1,5 @@
 
-include:
-  - component: $CI_SERVER_FQDN/comvidence/sources/platform/tools/sonarqube-gitlab-integration-management/sonarscanner_job@main
-
 stages:
-  - sonarscan
   - prepare
   - build
 
