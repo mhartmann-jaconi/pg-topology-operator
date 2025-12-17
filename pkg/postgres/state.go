@@ -122,49 +122,49 @@ func GetZoneForInstanceId(clusterName, instanceId string) string {
 // GetOrAssignZoneToInstance will either return the name of a currently assigned AZ
 // for the instance, or it will assign the currently least-used AZ to the instance and
 // and return the new AZ name.
-func GetOrAssignZoneToInstance(clusterName, instanceId string) string {
+func GetOrAssignZoneToInstance(clusterName, instanceId string) (string, error) {
 	zn := GetZoneForInstanceId(clusterName, instanceId)
 	if zn != "" {
-		return zn
+		return zn, nil
 	}
 	return SetZoneForInstanceId(clusterName, instanceId, GetLeastUsedZone(clusterName), false)
 }
 
 // SetZoneForInstanceId will assign the given AZ name to the instance in the internal
 // state map.
-func SetZoneForInstanceId(clusterName, instanceId, zoneName string, isHealthy bool) string {
+func SetZoneForInstanceId(clusterName, instanceId, zoneName string, isHealthy bool) (string, error) {
 	return setZoneForInstanceIdInternal(clusterName, instanceId, zoneName, isHealthy, false)
 }
 
-func SetZoneForInstanceIdIgnoreHealth(clusterName, instanceId, zoneName string) string {
+func SetZoneForInstanceIdIgnoreHealth(clusterName, instanceId, zoneName string) (string, error) {
 	return setZoneForInstanceIdInternal(clusterName, instanceId, zoneName, true, true)
 }
 
-func setZoneForInstanceIdInternal(clusterName, instanceId, zoneName string, isHealthy, ignoreHealth bool) string {
-	if clus, ok := clusters[clusterName]; ok {
-		if inst, ok := clus.instances[instanceId]; ok {
-			if inst.zone != zoneName {
-				slog.Info(fmt.Sprintf("Updating zone for instance %s from %s to %s", instanceId, inst.zone, zoneName))
-			}
-			inst.zone = zoneName
-			if !ignoreHealth {
-				inst.active = isHealthy
-			}
-			clus.instances[instanceId] = inst
-		} else {
-			slog.Info(fmt.Sprintf("Assiging zone %s to instance %s", zoneName, instanceId))
-			clus.instances[instanceId] = instance{
-				instanceId: instanceId,
-				zone:       zoneName,
-				active:     isHealthy,
-			}
-		}
-		clusters[clusterName] = clus
-	} else {
-		slog.Warn(fmt.Sprintf("Cluster %s not registered yet. Skip instance %s", clusterName, instanceId))
-		return ""
+func setZoneForInstanceIdInternal(clusterName, instanceId, zoneName string, isHealthy, ignoreHealth bool) (string, error) {
+	if _, ok := clusters[clusterName]; !ok {
+		slog.Debug(fmt.Sprintf("Cluster %s not registered yet; creating it...", clusterName))
+		CreateOrUpdateCluster(clusterName, "", "", 0)
 	}
-	return zoneName
+	clus := clusters[clusterName]
+	if inst, ok := clus.instances[instanceId]; ok {
+		if inst.zone != zoneName {
+			slog.Info(fmt.Sprintf("Updating zone for instance %s from %s to %s", instanceId, inst.zone, zoneName))
+		}
+		inst.zone = zoneName
+		if !ignoreHealth {
+			inst.active = isHealthy
+		}
+		clus.instances[instanceId] = inst
+	} else {
+		slog.Info(fmt.Sprintf("Assiging zone %s to instance %s", zoneName, instanceId))
+		clus.instances[instanceId] = instance{
+			instanceId: instanceId,
+			zone:       zoneName,
+			active:     isHealthy,
+		}
+	}
+	clusters[clusterName] = clus
+	return zoneName, nil
 }
 
 // DropInstanceId will remove an instance-AZ assignment from the internal state.

@@ -6,6 +6,12 @@ This webhook is responsible for assigning a
 created by [cloudnative-pg](https://cloudnative-pg.io/). In addition, this will also make sure that the primary Postgres
 instance is always running in the primary zone.
 
+## Installation
+
+```
+helm install pg-topology helm -n cnpg-system
+```
+
 ## cloudnative-pg behaviour
 
 ### Setup

@@ -1,40 +1,42 @@
+
+## @section Common parameters
+## @param nameOverride Override for the chart name.
 nameOverride: ""
+## @param fullnameOverride Override for the chart's full name.
 fullnameOverride: "pg-topology-operator"
 
+## @section Service Account parameters
 serviceAccount:
+  ## @param serviceAccount.create Specifies whether a service account should be created
   create: true
+  ## @param serviceAccount.name The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
   name: pg-topology-operator
+  ## @param serviceAccount.annotations Annotations to add to the service account
   annotations: {}
 
+## @section Service parameters
 service:
+  ## @param service.annotations Annotations to add to the service
   annotations: {}
 
+## @section Deployment parameters
+## @param annotations Annotations to add to the deployment
 annotations: {}
+
+## @param podAnnotations The annotations to add to the pod.
 podAnnotations: {}
 
+## @param replicaCount Number of replicas for the koptimize deployment.
 replicaCount: 1
 
-image:
-  repository: "jaconi.io/ipoque-pg-webhook"
-  tag: "latest"
-  pullPolicy: "IfNotPresent"
-  pullSecrets: []
-
-topology:
-  volumes:
-    east: nfs-east
-    west: nfs-west
-  labels:
-    zone: topology.kubernetes.io/zone
-    region: topology.kubernetes.io/region
-    leader: zone-leader
-  selector:
-    "kubernetes.io/metadata.name": "default"
-
 ports:
+  ## @param ports.http The container http port
   http: 8081
+  ## @param ports.tls The container TLS port
   tls: 9443
 
+## @param resources The controller container resources.
 resources:
   limits:
     cpu: 100m
@@ -42,7 +44,8 @@ resources:
   requests:
     cpu: 100m
     memory: 100Mi
-  
+
+## @param securityContext The pod's security context.
 securityContext: {}
 # capabilities:
 #   drop:
@@ -51,6 +54,40 @@ securityContext: {}
 # runAsNonRoot: true
 # runAsUser: 1000
 
+image:
+  ## @param image.repository The controller image.
+  repository: "docker.lp.rsint.net/platform/pg-topology-operator"
+  ## @param image.tag The controller image tag.
+  tag: "latest"
+  ## @param image.pullPolicy The controller image's pull policy.
+  pullPolicy: "Always"
+  ## @param image.pullSecrets The image pull secrets to use.
+  pullSecrets: []
+
+## @section Topology configuration parameters
+topology:
+  ## @param topology.volumes
+  # A map of region codes to PVC storage classes. Depending on the region,
+  # a PVC is created in, the appropriate storage class should be assigned.
+  volumes:
+    # region-1: storage-class-for-region-1
+    # region-2: storage-class-for-region-2
+    dc-01: longhorn # nfs-dc-01
+    dc-02: longhorn # nfs-dc-02
+  labels:
+    ## @param topology.labels.zone The name of the node label, where the AZ of the node is mentioned
+    zone: topology.kubernetes.io/zone
+    ## @param topology.labels.region The name of the node label, where the region of the node is mentioned
+    region: topology.kubernetes.io/region
+    ## @param topology.labels.leader The name of the node label; if existing, zone of this node is the primary zone
+    leader: topology.ipoque.com/leader
+  ## @param topology.selector A label selector for watching Postgres clusters
+  selector:
+    "kubernetes.io/metadata.name": "default"
+
+## @section Logging configuration parameters
 logging:
+  ## @param logging.level Operator log level
   level: debug
+  ## @param logging.json If 'true', log output is in json format
   json: "false"

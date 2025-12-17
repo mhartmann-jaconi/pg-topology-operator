@@ -56,9 +56,9 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	}
 
 	zoneName := pod.Spec.NodeSelector[viper.GetString(config.LabelZone)]
-	postgres.SetZoneForInstanceId(clusterName, instanceId, zoneName, util.PodIsHealthy(pod))
+	_, err := postgres.SetZoneForInstanceId(clusterName, instanceId, zoneName, util.PodIsHealthy(pod))
 
-	return reconcile.Result{}, nil
+	return reconcile.Result{}, err
 }
 
 func InitController(mgr manager.Manager) {

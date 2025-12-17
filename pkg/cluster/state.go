@@ -49,7 +49,7 @@ func Store(nodeName, zoneName, regionName string, leader bool) {
 		}
 		zones[zoneName].nodes[nodeName] = struct{}{}
 	} else {
-		if leader && zn.isLeader != leader {
+		if leader && !zn.isLeader {
 			primaryChanged = true
 		}
 		zn.isLeader = leader
@@ -82,6 +82,7 @@ func Store(nodeName, zoneName, regionName string, leader bool) {
 		slog.Info(fmt.Sprintf("zone %s changed to become the new leading zone", zoneName))
 		events.PrimaryAZChanged.Emit(context.TODO(), zoneName)
 	}
+	slog.Debug(fmt.Sprintf("current primary zone is '%s'", GetPrimaryZone()))
 }
 
 func Drop(nodeName string) {

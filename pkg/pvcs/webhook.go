@@ -53,16 +53,20 @@ func changeVolume(pvc *corev1.PersistentVolumeClaim) error {
 	primaryId := postgres.GetCurrentPrimaryInstanceId(clusterName)
 
 	instanceZone := ""
+	var err error
 
 	if primaryId == "" {
 		// no primary instance was initialized yet, assuming this PVC is the
 		// first one and therefore used for the primary instance
 		instanceZone = cluster.GetPrimaryZone()
-		postgres.SetZoneForInstanceIdIgnoreHealth(clusterName, instanceId, cluster.GetPrimaryZone())
+		_, err = postgres.SetZoneForInstanceIdIgnoreHealth(clusterName, instanceId, cluster.GetPrimaryZone())
 	} else {
 		// either assign the currently stored zone for this instance ID or get the
 		// least used zone and apply it
-		instanceZone = postgres.GetOrAssignZoneToInstance(clusterName, instanceId)
+		instanceZone, err = postgres.GetOrAssignZoneToInstance(clusterName, instanceId)
+	}
+	if err != nil {
+		return err
 	}
 
 	pvc.ObjectMeta.Labels[viper.GetString(config.LabelZone)] = instanceZone
