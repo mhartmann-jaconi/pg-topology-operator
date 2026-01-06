@@ -4,7 +4,6 @@ stages:
 default:
   tags:
     - docker
-    - non-privileged
     - no-internet
   image: docker.lp.rsint.net/base:10.33
 
@@ -19,7 +18,7 @@ docker:
     - DOCKER_IMAGE=${DOCKER_REGISTRY}/platform/${APP_NAME}:latest
   script:
     - apt-get update
-    - apt-get install -y make docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+    - sudo apt-get install -y make docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
     - make docker-build
     - make docker-upload
 
@@ -27,7 +26,11 @@ helm:
   stage: build
   script:
     - apt-get update
-    - apt-get install -y make helm curl
+    - sudo apt-get install curl gpg apt-transport-https --yes
+    - curl -fsSL https://packages.buildkite.com/helm-linux/helm-debian/gpgkey | gpg --dearmor | tee /usr/share/keyrings/helm.gpg > /dev/null
+    - echo "deb [signed-by=/usr/share/keyrings/helm.gpg] https://packages.buildkite.com/helm-linux/helm-debian/any/ any main" | tee /etc/apt/sources.list.d/helm-stable-debian.list
+    - apt-get update
+    - apt-get install -y make helm
     - make helm-package
     - make helm-upload
   artifacts:
