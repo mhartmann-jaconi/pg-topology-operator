@@ -1,7 +1,4 @@
 include:
-  - project: 'comvidence/sources/dpe/tools'
-    file: 'gitlab-ci/templates/software-bundles.yml'
-    ref: master
   - project: 'comvidence/sources/dpe/dev-tools/dpe-auto-tag'
     file: 'gitlab-ci/dpe-auto-tag.yml'
     ref: main
