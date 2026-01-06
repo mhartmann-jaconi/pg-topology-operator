@@ -5,7 +5,7 @@ default:
   tags:
     - docker
     - no-internet
-  image: docker.lp.rsint.net/builder:latest
+  image: docker.lp.rsint.net/builder:1.0
 
 variables:
   APP_NAME: "pg-topology-operator"
