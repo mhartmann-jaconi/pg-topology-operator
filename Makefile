@@ -55,7 +55,7 @@ helm-package:
 
 .PHONY: helm-upload
 helm-upload: ${HELM_CHART_DIR}/*.tgz  # requires helm-package
-	@$(foreach path, $^, curl -u ${HELM_REPOSITORY_USERNAME}:${HELM_REPOSITORY_PASSWORD} --fail -XPUT "${HELM_REPO_PATH}/$(notdir ${path})" --upload-file ${path} &&) \
+	@$(foreach path, $^, curl -k -u ${HELM_REPOSITORY_USERNAME}:${HELM_REPOSITORY_PASSWORD} --fail -XPUT "${HELM_REPO_PATH}/$(notdir ${path})" --upload-file ${path} &&) \
 		echo "\n\nHelm charts uploaded."
 
 #
