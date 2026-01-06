@@ -30,7 +30,7 @@ helm:
   stage: build
   script:
     - apt-get update
-    - apt-get install curl gpg apt-transport-https ca-certificate --yes
+    - apt-get install curl gpg apt-transport-https ca-certificates --yes
     - curl -fsSL https://packages.buildkite.com/helm-linux/helm-debian/gpgkey | apt-key add -
     - add-apt-repository "deb [arch=amd64] https://packages.buildkite.com/helm-linux/helm-debian/any/ any main"
     - apt-get install -y make helm
