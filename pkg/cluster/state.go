@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/jaconi-io/ipoque-pg-webhook/pkg/config"
 	"github.com/jaconi-io/ipoque-pg-webhook/pkg/events"
+	"github.com/spf13/viper"
 )
 
 type node struct {
@@ -31,6 +33,11 @@ var zones = map[string]Zone{}
 func Store(nodeName, zoneName, regionName string, leader bool) {
 	if zoneName == "" || regionName == "" {
 		slog.Debug(fmt.Sprintf("Missing labels for node %s", nodeName))
+		return
+	}
+
+	if GetStorageClassForRegion(regionName) == "" {
+		slog.Warn(fmt.Sprintf("Region %s has no storage class assinged. Skip node %s", regionName, nodeName))
 		return
 	}
 
@@ -103,6 +110,18 @@ func Drop(nodeName string) {
 	delete(nodes, nodeName)
 }
 
+func LogZones() {
+	result := make(map[string][]string)
+	for _, zn := range zones {
+		if zns, ok := result[zn.region]; ok {
+			result[zn.region] = append(zns, zn.name)
+		} else {
+			result[zn.region] = []string{zn.name}
+		}
+	}
+	slog.Debug(fmt.Sprintf("Region-Zone-Map: %v", result))
+}
+
 func GetRegionForZone(zoneName string) string {
 	for _, z := range zones {
 		if z.name == zoneName {
@@ -130,4 +149,17 @@ func GetPrimaryZone() string {
 		}
 	}
 	return ""
+}
+
+func GetStorageClassForZone(zone string) string {
+	return GetStorageClassForRegion(GetRegionForZone(zone))
+}
+
+func GetStorageClassForRegion(region string) string {
+	volumeMap := viper.GetStringMapString(config.PgVolumes)
+	if storageClass, ok := volumeMap[region]; ok {
+		return storageClass
+	} else {
+		return ""
+	}
 }

@@ -18,10 +18,6 @@ const clusterNamespace = "default"
 func Test_findNewEligibleTargetInstance(t *testing.T) {
 	g := NewWithT(t)
 
-	viper.Set(config.LogLevel, "debug")
-	viper.Set(config.LabelRegion, "topology.kubernetes.io/region")
-	viper.Set(config.LabelZone, "topology.kubernetes.io/zone")
-	config.InitLogging()
 	defer viper.Reset()
 
 	setup()
@@ -41,10 +37,6 @@ func Test_findNewEligibleTargetInstance(t *testing.T) {
 func Test_findNewEligibleTargetInstanceInternal(t *testing.T) {
 	g := NewWithT(t)
 
-	viper.Set(config.LogLevel, "debug")
-	viper.Set(config.LabelRegion, "topology.kubernetes.io/region")
-	viper.Set(config.LabelZone, "topology.kubernetes.io/zone")
-	config.InitLogging()
 	defer viper.Reset()
 
 	setup()
@@ -83,6 +75,14 @@ func Test_findNewEligibleTargetInstanceInternal(t *testing.T) {
 }
 
 func setup() {
+	viper.Set(config.LogLevel, "debug")
+	viper.Set(config.LabelRegion, "topology.kubernetes.io/region")
+	viper.Set(config.LabelZone, "topology.kubernetes.io/zone")
+	config.InitLogging()
+	viper.Set(config.PgVolumes, map[string]string{
+		"east": "sc-east",
+		"west": "sc-west",
+	})
 	cluster.Store("node1", "east-1", "east", true)
 	cluster.Store("node2", "east-2", "east", false)
 	cluster.Store("node3", "west-1", "west", false)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/jaconi-io/ipoque-pg-webhook/pkg/config"
 	"github.com/jaconi-io/ipoque-pg-webhook/pkg/events"
 	. "github.com/onsi/gomega"
 	"github.com/spf13/viper"
@@ -11,6 +12,10 @@ import (
 
 func TestStore(t *testing.T) {
 	g := NewWithT(t)
+	viper.Set(config.PgVolumes, map[string]string{
+		"east": "sc-east",
+		"west": "sc-west",
+	})
 	defer cleanup()
 
 	count := 0
@@ -35,6 +40,10 @@ func TestStore(t *testing.T) {
 
 func TestGetPrimaryZone(t *testing.T) {
 	g := NewWithT(t)
+	viper.Set(config.PgVolumes, map[string]string{
+		"east": "sc-east",
+		"west": "sc-west",
+	})
 	defer cleanup()
 
 	events.AddListenerForAZChange(func(ctx context.Context, s string) {})
@@ -56,6 +65,9 @@ func TestGetPrimaryZone(t *testing.T) {
 
 func TestGetHealthyZones(t *testing.T) {
 	g := NewWithT(t)
+	viper.Set(config.PgVolumes, map[string]string{
+		"east": "sc-east",
+	})
 	defer cleanup()
 
 	events.AddListenerForAZChange(func(ctx context.Context, s string) {})

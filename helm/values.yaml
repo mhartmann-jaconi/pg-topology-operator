@@ -58,7 +58,7 @@ image:
   ## @param image.repository The controller image.
   repository: "docker.lp.rsint.net/platform/pg-topology-operator"
   ## @param image.tag The controller image tag.
-  tag: "latest"
+  tag: "v0.7.0"
   ## @param image.pullPolicy The controller image's pull policy.
   pullPolicy: "Always"
   ## @param image.pullSecrets The image pull secrets to use.
@@ -72,8 +72,8 @@ topology:
   volumes:
     # region-1: storage-class-for-region-1
     # region-2: storage-class-for-region-2
-    dc-01: longhorn # nfs-dc-01
-    dc-02: longhorn # nfs-dc-02
+    dc-01: vsphere-csi-wait # nfs-dc-01
+    dc-02: vsphere-csi-wait # nfs-dc-02
   labels:
     ## @param topology.labels.zone The name of the node label, where the AZ of the node is mentioned
     zone: topology.kubernetes.io/zone

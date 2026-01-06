@@ -24,6 +24,10 @@ func TestReconcile(t *testing.T) {
 	viper.Set(config.LabelLeader, "lead")
 	viper.Set(config.LabelRegion, "region")
 	viper.Set(config.LabelZone, "zone")
+	viper.Set(config.PgVolumes, map[string]string{
+		"east": "sc-east",
+		"west": "sc-west",
+	})
 	defer cleanup()
 
 	node1 := createNode("node1", "east-1", "east", true, true)

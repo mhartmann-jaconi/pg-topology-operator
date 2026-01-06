@@ -38,13 +38,14 @@ func TestApplyNodeSelector(t *testing.T) {
 	// primary instance should get primary zone
 	cluster.Store("node3", "zone3", "region", true)
 	cluster.Store("node4", "zone4", "region", false)
+	postgres.SetZoneForInstanceId(clusterName, "3", "zone3", true)
 	pod3 := createPod("3", "", true)
 	err = applyNodeSelector(pod3)
 	g.Expect(err).To(BeNil())
 	g.Expect(pod3.Spec.NodeSelector[zoneLabel]).To(Equal("zone3"))
 
 	// a non-primary pod should get the least used zone applied
-	postgres.SetZoneForInstanceId(clusterName, "3", "zone3", true)
+	postgres.SetZoneForInstanceId(clusterName, "4", "zone4", true)
 	pod4 := createPod("4", "", false)
 	err = applyNodeSelector(pod4)
 	g.Expect(err).To(BeNil())

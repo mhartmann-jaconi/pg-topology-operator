@@ -17,8 +17,11 @@ build:
   before_script:
     # TODO get an actual image tag
     - DOCKER_IMAGE=${DOCKER_REGISTRY}/platform/${APP_NAME}:latest
-  script:
-    - make docker-push
+  script: 
+    - docker build -t ${DOCKER_IMAGE} -f Dockerfile .
+    - docker push ${DOCKER_IMAGE}
+    - helm package helm -d build
+    - helm push build/* helm.com-dev01.lp.rsint.net
 
 # TODO helm 
 # https://helm.com-dev01.lp.rsint.net:9000/

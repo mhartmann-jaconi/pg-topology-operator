@@ -46,7 +46,11 @@ func (defaulter) Default(_ context.Context, pod *corev1.Pod) error {
 		return nil
 	}
 
-	return applyNodeSelector(pod)
+	if err := applyNodeSelector(pod); err != nil {
+		slog.Error(fmt.Sprintf("failed to mutate pod: %v", err))
+		return err
+	}
+	return nil
 }
 
 func applyNodeSelector(pod *corev1.Pod) error {

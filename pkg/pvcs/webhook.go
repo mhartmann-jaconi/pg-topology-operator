@@ -42,7 +42,11 @@ func (defaulter) Default(_ context.Context, pvc *corev1.PersistentVolumeClaim) e
 		return nil
 	}
 
-	return changeVolume(pvc)
+	if err := changeVolume(pvc); err != nil {
+		slog.Error(fmt.Sprintf("Failed to update PVC: %v", err))
+		return err
+	}
+	return nil
 }
 
 // changeVolume will create a copy of the given persistent volume and change the storage class
@@ -74,15 +78,13 @@ func changeVolume(pvc *corev1.PersistentVolumeClaim) error {
 }
 
 func applyStorageClass(pvc *corev1.PersistentVolumeClaim, zone string) error {
-	region := cluster.GetRegionForZone(zone)
-	slog.Debug(fmt.Sprintf("Handle storage class for PVC %s on zone %s in region %s", pvc.Name, zone, region))
-
-	volumeMap := viper.GetStringMapString(config.PgVolumes)
-	if storageClass, ok := volumeMap[region]; ok {
+	storageClass := cluster.GetStorageClassForZone(zone)
+	if storageClass != "" {
 		slog.Info(fmt.Sprintf("Set storage class %s to volume PVC %s", storageClass, pvc.Name))
 		pvc.Spec.StorageClassName = &storageClass
 	} else {
-		return fmt.Errorf("no storage class for region %s", region)
+		cluster.LogZones()
+		return fmt.Errorf("no storage class for zone %s", zone)
 	}
 	return nil
 }
