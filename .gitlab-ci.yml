@@ -17,15 +17,17 @@ docker:
   before_script:
     # TODO get an actual image tag
     - DOCKER_IMAGE=${DOCKER_REGISTRY}/platform/${APP_NAME}:latest
-  script: 
-    - apt-get install make docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+  script:
+    - apt-get update
+    - apt-get install -y make docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
     - make docker-build
     - make docker-upload
 
 helm:
   stage: build
   script:
-    - apt-get install make helm curl
+    - apt-get update
+    - apt-get install -y make helm curl
     - make helm-package
     - make helm-upload
   artifacts:
