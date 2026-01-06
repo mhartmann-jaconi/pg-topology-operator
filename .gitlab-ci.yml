@@ -17,8 +17,8 @@ docker:
     # TODO get an actual image tag
     - DOCKER_IMAGE=${DOCKER_REGISTRY}/platform/${APP_NAME}:latest
   script:
-    - apt update
-    - apt install apt-transport-https ca-certificates curl software-properties-common
+    - apt-get update
+    - apt-get install apt-transport-https gpg ca-certificates curl
     - curl -fsSL https://download.docker.com/linux/ubuntu/gpg | apt-key add -
     - add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu focal stable"
     - apt-get update
@@ -30,7 +30,7 @@ helm:
   stage: build
   script:
     - apt-get update
-    - apt-get install curl apt-transport-https --yes
+    - apt-get install curl gpg apt-transport-https --yes
     - curl -fsSL https://packages.buildkite.com/helm-linux/helm-debian/gpgkey | apt-key add -
     - apt-get install -y make helm
     - make helm-package
