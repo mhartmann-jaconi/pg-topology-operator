@@ -1,3 +1,10 @@
+include:
+  - project: 'comvidence/sources/dpe/tools'
+    file: 'gitlab-ci/templates/software-bundles.yml'
+    ref: master
+  - project: 'comvidence/sources/dpe/dev-tools/dpe-auto-tag'
+    file: 'gitlab-ci/dpe-auto-tag.yml'
+    ref: main
 
 stages:
   - build
@@ -16,7 +23,7 @@ docker:
   stage: build
   image: docker.lp.rsint.net/docker:24.0.5-cli
   services:
-    - docker:24.0.5-dind
+    -  docker.lp.rsint.net/docker:24.0.5-dind
   before_script:
     # TODO get an actual image tag
     - DOCKER_IMAGE=${DOCKER_REGISTRY}/platform/${APP_NAME}:latest
@@ -24,12 +31,15 @@ docker:
     - docker build -t ${DOCKER_IMAGE} -f Dockerfile .
     - docker push ${DOCKER_IMAGE}
 
-helm:
-  stage: build 
-  image:  docker.lp.rsint.net/alpine/helm:4.0.4
-  script: 
-    - helm package helm -d build
-    - helm push build/* oci://helm.com-dev01.lp.rsint.net/d-helm-dev
+build-and-upload-helm-charts:
+    stage: build
+    script:
+        - make helm-package
+        - make helm-upload
+    artifacts:
+        paths:
+            - build
+
 # TODO helm 
 # https://helm.com-dev01.lp.rsint.net:9000/
 #   -> d-helm-dev
