@@ -26,7 +26,7 @@ docker:
     - DOCKER_IMAGE=${DOCKER_REGISTRY}/platform/${APP_NAME}:latest
   script: 
     - make docker-build
-    - make docker-push
+    - make docker-upload
 
 build-and-upload-helm-charts:
     stage: build
