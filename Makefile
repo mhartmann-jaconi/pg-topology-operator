@@ -39,7 +39,7 @@ mod:
 #
 
 .PHONY: docker-build
-docker-build: fmt vet
+docker-build:
 	docker build -t ${DOCKER_IMAGE} .
 
 .PHONY: docker-upload
