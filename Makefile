@@ -1,14 +1,11 @@
 # Image URL to use all building/pushing image targets
 DOCKER_TAG                      ?= latest
 BUILD_DIR                        = build
-
 DOCKER_SERVICE_IMAGE_PATH       ?= docker.lp.rsint.net/platform
 DOCKER_SERVICE_IMAGE_NAME        = ${DOCKER_SERVICE_IMAGE_PATH}/pg-topology-operator
 DOCKER_IMAGE ?= ${DOCKER_SERVICE_IMAGE_NAME}:${DOCKER_TAG}
-
 HELM_REPO_PATH ?= https://artifactory.lp.rsint.net/artifactory/platform-helm-dev
 HELM_CHART_DIR = ${BUILD_DIR}
-
 
 all: test
 
