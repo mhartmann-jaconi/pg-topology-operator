@@ -9,28 +9,28 @@ HELM_CHART_DIR = ${BUILD_DIR}
 
 all: test
 
-.PHONY run 
+.PHONY: run
 run: fmt vet
 	go run main.go
 
-.PHONY test 
+.PHONY: test
 test: build
 	go test ./... -coverprofile cover.out
 
-.PHONY build 
+.PHONY: build
 build: fmt vet
 	rm -f bin/operator
 	go build -o bin/operator main.go
 
-.PHONY fmt 
+.PHONY: fmt
 fmt: mod
 	go fmt . ./pkg/...
 
-.PHONY vet 
+.PHONY: vet
 vet:
 	go vet ./pkg/...
 
-.PHONY mod
+.PHONY: mod
 mod:
 	go mod tidy
 
@@ -38,15 +38,15 @@ mod:
 # - - - - - - - - - - Artifact Generation - - - - - - - - - -
 #
 
-.PHONY docker-build
+.PHONY: docker-build
 docker-build: fmt vet
 	docker build -t ${DOCKER_IMAGE} .
 
-.PHONY docker-upload
+.PHONY: docker-upload
 docker-upload: docker-build
 	docker push ${DOCKER_IMAGE}
 
-.PHONY helm-package
+.PHONY: helm-package
 helm-package:
 	helm package helm -d build
 
@@ -59,6 +59,6 @@ helm-upload: ${HELM_CHART_DIR}/*.tgz  # requires helm-package
 # - - - - - - - - - - K8s Testing - - - - - - - - - -
 #
 
-.PHONY k8s-install
+.PHONY: k8s-install
 k8s-install: docker-upload
 	helm install pg-topology helm -n cnpg-system
