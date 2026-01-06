@@ -8,7 +8,6 @@ include:
 
 stages:
   - build
-  - deploy
 
 default:
   tags:
@@ -19,6 +18,10 @@ default:
 variables:
   APP_NAME: "pg-topology-operator"
   DOCKER_REGISTRY: "docker.lp.rsint.net"
+  DOCKER_TLS_CERTDIR: ""
+  DOCKER_HOST: "tcp://docker:2375"
+  DOCKER_DRIVER: "overlay2"
+  HELM_REPO_PATH: "https://artifactory.lp.rsint.net/artifactory/platform-helm"
 
 docker:
   stage: build
@@ -29,15 +32,11 @@ docker:
     - make docker-build
     - make docker-upload
 
-build-and-upload-helm-charts:
-    stage: build
-    script:
-        - make helm-package
-        - make helm-upload
-    artifacts:
-        paths:
-            - build
-
-# TODO helm 
-# https://helm.com-dev01.lp.rsint.net:9000/
-#   -> d-helm-dev
+helm:
+  stage: build
+  script:
+    - make helm-package
+    - make helm-upload
+  artifacts:
+    paths:
+      - build
