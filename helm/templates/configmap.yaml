@@ -6,13 +6,10 @@ data:
   application.yaml: |
     service:
       name: {{ include "toperator.fullname" . }}
-      port: 443
       namespace: {{ .Release.Namespace }}
     pod:
       port: {{ .Values.ports.tls }}
     postgres:
-      selector:
-        {{- toYaml .Values.topology.selector | nindent 8 }}
       volumes:
         {{- toYaml  .Values.topology.volumes | nindent 8 }}
     topology:

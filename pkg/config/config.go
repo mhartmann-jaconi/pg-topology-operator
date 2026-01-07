@@ -16,8 +16,7 @@ import (
 )
 
 var (
-	pgSelectors map[string]string
-	pgVolumes   map[string]string
+	pgVolumes map[string]string
 )
 
 const (
@@ -25,14 +24,12 @@ const (
 	LabelRegion = "topology.label_region"
 	LabelLeader = "topology.label_leader"
 
-	PgSelector = "postgres.selector"
-	PgVolumes  = "postgres.volumes"
+	PgVolumes = "postgres.volumes"
 
 	PodPort = "pod.port"
 
 	ServiceName      = "service.name"
 	ServiceNamespace = "service.namespace"
-	ServicePort      = "service.port"
 
 	LogJson  = "log.json"
 	LogLevel = "log.level"
@@ -43,8 +40,6 @@ func Bootstrap(rootCmd *cobra.Command) {
 	rootCmd.Flags().String(LabelRegion, "topology.kubernetes.io/region", "node label for region")
 	rootCmd.Flags().String(LabelLeader, "zone-leader", "node label to identify primary zone")
 
-	pgSelectors = make(map[string]string)
-	rootCmd.Flags().StringToStringVar(&pgSelectors, PgSelector, map[string]string{}, "label selector for PG clusters")
 	pgVolumes = map[string]string{}
 	rootCmd.Flags().StringToStringVar(&pgVolumes, PgVolumes, map[string]string{}, "storage class per region map")
 
@@ -52,7 +47,6 @@ func Bootstrap(rootCmd *cobra.Command) {
 
 	rootCmd.Flags().String(ServiceName, "", "name of the webhook implementation K8s service")
 	rootCmd.Flags().String(ServiceNamespace, "", "namespace of the webhook implementation K8s service")
-	rootCmd.Flags().Int(ServicePort, 443, "port of the wehook service")
 
 	rootCmd.Flags().Bool(LogJson, false, "output logs in JSON format")
 	rootCmd.Flags().String(LogLevel, "info", "log level")

@@ -15,7 +15,7 @@ spec:
   ipFamilyPolicy: SingleStack
   ports:
     - name: https
-      port: 443
+      port: {{ .Values.service.port }}
       protocol: TCP
       targetPort: {{ .Values.ports.tls }}
   selector:

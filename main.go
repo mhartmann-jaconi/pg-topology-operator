@@ -97,8 +97,8 @@ func main() {
 				return err
 			}
 
-			// Create the webhook configurations inside the cluster.
-			err = webhook.Create(cmd.Context(), client, caCert, pods.BuildWebhook, pvcs.BuildWebhook)
+			// Update the webhook configurations inside the cluster.
+			err = webhook.Update(cmd.Context(), client, caCert, pods.MutationConfigName, pvcs.MutationConfigName)
 			if err != nil {
 				return err
 			}

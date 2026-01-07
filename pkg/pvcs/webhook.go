@@ -1,7 +1,6 @@
 package pvcs
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"log/slog"
@@ -9,23 +8,14 @@ import (
 	"github.com/jaconi-io/ipoque-pg-webhook/pkg/cluster"
 	"github.com/jaconi-io/ipoque-pg-webhook/pkg/config"
 	"github.com/jaconi-io/ipoque-pg-webhook/pkg/postgres"
-	"github.com/jaconi-io/ipoque-pg-webhook/pkg/webhook"
 	"github.com/spf13/viper"
 
-	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	corev1 "k8s.io/api/core/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
 const mutationEndpoint string = "/mutate-pvcs"
-const mutationConfigName string = "postgres-pvc-update"
-
-func BuildWebhook(caCert *bytes.Buffer) *admissionregistrationv1.MutatingWebhookConfiguration {
-	apiGroup := corev1.SchemeGroupVersion.Group
-	apiVersion := corev1.SchemeGroupVersion.Version
-	apiResource := string(corev1.ResourcePersistentVolumeClaims)
-	return webhook.Build(caCert, mutationEndpoint, mutationConfigName, apiGroup, apiVersion, apiResource)
-}
+const MutationConfigName string = "postgres-pvc-update"
 
 func Setup(mgr ctrl.Manager) error {
 	return ctrl.NewWebhookManagedBy(mgr, &corev1.PersistentVolumeClaim{}).

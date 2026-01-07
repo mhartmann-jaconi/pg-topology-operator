@@ -1,7 +1,6 @@
 package pods
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"log/slog"
@@ -10,11 +9,9 @@ import (
 	"github.com/jaconi-io/ipoque-pg-webhook/pkg/cluster"
 	"github.com/jaconi-io/ipoque-pg-webhook/pkg/config"
 	"github.com/jaconi-io/ipoque-pg-webhook/pkg/postgres"
-	"github.com/jaconi-io/ipoque-pg-webhook/pkg/webhook"
 
 	"github.com/spf13/viper"
 
-	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/util/retry"
@@ -22,14 +19,7 @@ import (
 )
 
 const mutationEndpoint string = "/mutate-pods"
-const mutationConfigName string = "postgres-pod-update"
-
-func BuildWebhook(caCert *bytes.Buffer) *admissionregistrationv1.MutatingWebhookConfiguration {
-	apiGroup := corev1.SchemeGroupVersion.Group
-	apiVersion := corev1.SchemeGroupVersion.Version
-	apiResource := string(corev1.ResourcePods)
-	return webhook.Build(caCert, mutationEndpoint, mutationConfigName, apiGroup, apiVersion, apiResource)
-}
+const MutationConfigName string = "postgres-pod-update"
 
 func Setup(mgr ctrl.Manager) error {
 	return ctrl.NewWebhookManagedBy(mgr, &corev1.Pod{}).

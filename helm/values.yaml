@@ -19,6 +19,8 @@ serviceAccount:
 service:
   ## @param service.annotations Annotations to add to the service
   annotations: {}
+  ## @param service.port Port number to expose service for
+  port: 443
 
 ## @section Deployment parameters
 ## @param annotations Annotations to add to the deployment
@@ -58,11 +60,24 @@ image:
   ## @param image.repository The controller image.
   repository: "docker.lp.rsint.net/platform/pg-topology-operator"
   ## @param image.tag The controller image tag.
-  tag: "v0.7.0"
+  tag: "v0.7.1"
   ## @param image.pullPolicy The controller image's pull policy.
   pullPolicy: "Always"
   ## @param image.pullSecrets The image pull secrets to use.
   pullSecrets: []
+
+## @section Ingress parameters
+ingress:
+  ## @param ingress.enabled Create an Ingress object, if 'true'
+  enabled: false 
+  ## @param ingress.annotations Ingress Annotations
+  annotations: {}
+  ## @param ingress.className Dedicated ingress class, blank for default
+  className: 
+  ## @param ingress.tlsSecret Name of secret, containing TLS certificates
+  tlsSecret:
+  ## @param ingress.host External host name
+  host: example.com
 
 ## @section Topology configuration parameters
 topology:
