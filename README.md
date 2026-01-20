@@ -12,8 +12,8 @@ instance is always running in the primary zone.
 helm install pg-topology helm -n cnpg-system
 ```
 
-## cloudnative-pg behaviour
 
+## cloudnative-pg behaviour
 ### Setup
 
 1. The first replica created is the sole primary instance.
