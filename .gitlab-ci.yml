@@ -5,7 +5,10 @@ variables:
   APP_NAME: "pg-topology-operator"
   DOCKER_REGISTRY: "docker.lp.rsint.net"
 
+# TODO create git tag for merge to main
+
 docker:
+  # Step more or less copied from https://confluence.rsint.net/spaces/PLTMNT/pages/1142282258/Building+Images
   stage: build
   image:
     name: docker.lp.rsint.net/coc/kaniko-rs:latest
@@ -15,14 +18,18 @@ docker:
     - non-privileged
   before_script:
     # TODO get an actual image tag
-    - DOCKER_IMAGE=${DOCKER_REGISTRY}/platform/${APP_NAME}:v0.7.1
+    - DOCKER_IMAGE=${DOCKER_REGISTRY}/platform/${APP_NAME}:latest
     - mkdir -p /kaniko/.docker
     - echo "{\"auths\":{\"docker.lp.rsint.net\":{\"username\":\"$USERNAME\",\"password\":\"$PASSWORD\"}}}" > /kaniko/.docker/config.json
   script:
     - echo "Building $DOCKER_IMAGE"
+    # TODO on release tag, push to oci.com-releases02.lp.rsint.net
+    #  we would also need to check access rights of gitlab jobs
+    #  manual push described here: https://confluence.rsint.net/spaces/PLTMNT/pages/1304118227/Harbor
     - /kaniko/executor -v info --context $CI_PROJECT_DIR --dockerfile $CI_PROJECT_DIR/Dockerfile --destination $DOCKER_IMAGE
 
 # TODO solve helm package an push somehow
+#  Target for releases: helm.com-releases02.lp.rsint.net
 #helm:
 #  stage: build
 #  script:
