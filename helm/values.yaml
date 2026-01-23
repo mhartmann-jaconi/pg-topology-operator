@@ -103,6 +103,6 @@ topology:
 ## @section Logging configuration parameters
 logging:
   ## @param logging.level Operator log level
-  level: debug
+  level: info
   ## @param logging.json If 'true', log output is in json format
   json: "false"

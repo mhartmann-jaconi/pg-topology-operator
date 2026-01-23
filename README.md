@@ -12,6 +12,13 @@ instance is always running in the primary zone.
 helm install pg-topology helm -n cnpg-system
 ```
 
+## Build and push
+
+```
+helm package helm
+chart="$(ls -t1 pg*.tgz | head -n1)"
+curl -k -u yourAD:yourPW -XPUT "https://helm.lp.rsint.net/helm-dev/rs/coc/platform/$chart" -T $chart
+```
 
 ## cloudnative-pg behaviour
 ### Setup

@@ -4,7 +4,7 @@ BUILD_DIR                        = build
 DOCKER_SERVICE_IMAGE_PATH       ?= docker.lp.rsint.net/platform
 DOCKER_SERVICE_IMAGE_NAME        = ${DOCKER_SERVICE_IMAGE_PATH}/pg-topology-operator
 DOCKER_IMAGE ?= ${DOCKER_SERVICE_IMAGE_NAME}:${DOCKER_TAG}
-HELM_REPO_PATH ?= https://artifactory.lp.rsint.net/artifactory/platform-helm-dev
+HELM_REPO_PATH ?= https://helm.lp.rsint.net/helm-dev/rs/coc/platform
 HELM_CHART_DIR = ${BUILD_DIR}
 
 all: test

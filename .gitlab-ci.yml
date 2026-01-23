@@ -30,6 +30,7 @@ docker:
 
 # TODO solve helm package an push somehow
 #  Target for releases: helm.com-releases02.lp.rsint.net
+#  Standard target: helm.lp.rsint.net/helm-dev/rs/coc/platform
 #helm:
 #  stage: build
 #  script:
