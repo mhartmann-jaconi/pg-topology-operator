@@ -19,7 +19,7 @@ func TestReconcile(t *testing.T) {
 	g := NewWithT(t)
 
 	primaryChangeCount := 0
-	events.AddListenerForAZChange(func(ctx context.Context, s string) { primaryChangeCount++ })
+	events.SetListenersForAZChange(func(ctx context.Context, s string) { primaryChangeCount++ })
 
 	viper.Set(config.LabelLeader, "lead")
 	viper.Set(config.LabelRegion, "region")
@@ -51,6 +51,7 @@ func TestReconcile(t *testing.T) {
 	g.Expect(GetRegionForZone("east-2")).To(Equal("east"))
 	g.Expect(GetRegionForZone("west-1")).To(Equal("west"))
 	g.Expect(GetRegionForZone("west-2")).To(Equal("west"))
+	g.Expect(primaryChangeCount).To(Equal(1))
 
 	// make zone west-1 unhealthy
 	node3.Spec.Taints = []corev1.Taint{{Effect: corev1.TaintEffectNoSchedule}}
@@ -67,7 +68,49 @@ func TestReconcile(t *testing.T) {
 	// check that primary zone changed
 	g.Expect(GetPrimaryZone()).To(Equal("east-2"))
 	g.Expect(GetHealthyZones()).To(ContainElements("east-1", "east-2", "west-2"))
+	g.Expect(primaryChangeCount).To(Equal(2))
+}
+
+func TestReconcile_unhealthy(t *testing.T) {
+	g := NewWithT(t)
+
+	primaryChangeCount := 0
+	events.SetListenersForAZChange(func(ctx context.Context, s string) { primaryChangeCount++ })
+
+	viper.Set(config.LabelLeader, "lead")
+	viper.Set(config.LabelRegion, "region")
+	viper.Set(config.LabelZone, "zone")
+	viper.Set(config.PgVolumes, map[string]string{
+		"east": "sc-east",
+		"west": "sc-west",
+	})
+	defer cleanup()
+
+	node1 := createNode("node1", "east-1", "east", true, true)
+	node2 := createNode("node2", "east-2", "east", true, false)
+
+	_, err := runReconcile(node1)
+	g.Expect(err).To(BeNil())
+	_, err = runReconcile(node2)
+	g.Expect(err).To(BeNil())
+
+	g.Expect(GetPrimaryZone()).To(Equal("east-1"))
 	g.Expect(primaryChangeCount).To(Equal(1))
+
+	// make zone east-1 unhealthy
+	node1.Spec.Taints = []corev1.Taint{{Effect: corev1.TaintEffectNoSchedule}}
+	_, err = runReconcile(node1)
+	g.Expect(err).To(BeNil())
+
+	g.Expect(GetPrimaryZone()).To(BeEmpty())
+
+	// make zone east-1 healthy again
+	node1.Spec.Taints = []corev1.Taint{}
+	_, err = runReconcile(node1)
+	g.Expect(err).To(BeNil())
+
+	g.Expect(GetPrimaryZone()).To(Equal("east-1"))
+	g.Expect(primaryChangeCount).To(Equal(2))
 }
 
 func runReconcile(node *corev1.Node) (reconcile.Result, error) {

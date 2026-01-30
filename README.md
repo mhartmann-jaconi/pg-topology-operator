@@ -14,6 +14,15 @@ helm install pg-topology helm -n cnpg-system
 
 ## Build and push
 
+### docker
+
+```
+docker build . -f Dockerfile -t docker.lp.rsint.net/platform/pg-topology-operator:v0.7.2
+docker push docker.lp.rsint.net/platform/pg-topology-operator:v0.7.2
+```
+
+### helm
+
 ```
 helm package helm
 chart="$(ls -t1 pg*.tgz | head -n1)"

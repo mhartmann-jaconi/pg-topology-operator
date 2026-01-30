@@ -60,7 +60,7 @@ image:
   ## @param image.repository The controller image.
   repository: "docker.lp.rsint.net/platform/pg-topology-operator"
   ## @param image.tag The controller image tag.
-  tag: "v0.7.1"
+  tag: "v0.7.2"
   ## @param image.pullPolicy The controller image's pull policy.
   pullPolicy: "Always"
   ## @param image.pullSecrets The image pull secrets to use.

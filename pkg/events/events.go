@@ -15,3 +15,10 @@ func AddListenerForAZChange(listener func(ctx context.Context, s string)) {
 	}
 	PrimaryAZChanged.AddListener(listener)
 }
+
+func SetListenersForAZChange(listeners ...func(ctx context.Context, s string)) {
+	PrimaryAZChanged = signals.New[string]()
+	for _, l := range listeners {
+		AddListenerForAZChange(l)
+	}
+}

@@ -55,14 +55,18 @@ func Store(nodeName, zoneName, regionName string, leader bool) {
 			nodes:     map[string]struct{}{},
 		}
 		zones[zoneName].nodes[nodeName] = struct{}{}
+		if leader {
+			primaryChanged = true
+		}
 	} else {
-		if leader && !zn.isLeader {
+		if leader && (!zn.isLeader || !zn.isHealthy) {
 			primaryChanged = true
 		}
 		zn.isLeader = leader
 		if _, ok := zn.nodes[nodeName]; !ok {
 			zn.nodes[nodeName] = struct{}{}
 		}
+		zn.isHealthy = true
 		zones[zoneName] = zn
 	}
 	if existing, ok := nodes[nodeName]; ok {

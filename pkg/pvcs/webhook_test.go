@@ -17,7 +17,7 @@ import (
 func TestChangeVolume(t *testing.T) {
 	g := NewWithT(t)
 
-	events.AddListenerForAZChange(func(ctx context.Context, s string) {})
+	events.SetListenersForAZChange(func(ctx context.Context, s string) {})
 
 	viper.Set(config.PgVolumes, map[string]string{"east": "nfs-east", "west": "nfs-west"})
 	defer viper.Reset()
