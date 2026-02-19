@@ -61,7 +61,7 @@ func getStandbyInstanceCount(cluster *pgapi.Cluster) int {
 	syncNum := cluster.Spec.PostgresConfiguration.Synchronous.Number
 	maxStandby := cluster.Spec.PostgresConfiguration.Synchronous.MaxStandbyNamesFromCluster
 
-	if *maxStandby > syncNum {
+	if maxStandby != nil && *maxStandby > syncNum {
 		return *maxStandby
 	} else {
 		return syncNum
