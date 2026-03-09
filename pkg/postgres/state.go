@@ -3,9 +3,11 @@ package postgres
 import (
 	"fmt"
 	"log/slog"
+	"maps"
+	"slices"
+	"sort"
 	"strconv"
-
-	nodes "github.com/jaconi-io/ipoque-pg-webhook/pkg/cluster"
+	"strings"
 )
 
 // just use a high number here, which is bigger than the max amount of
@@ -13,170 +15,156 @@ import (
 const MaxInt = 500000
 
 type Cluster struct {
-	name      string
-	namespace string
-	instances map[string]instance
-	primary   string
-	standbies int
+	name           string
+	namespace      string
+	instances      map[string]*Instance
+	primary        string
+	desiredPrimary string
+	syncNum        int
 }
 
-type instance struct {
+type Instance struct {
 	instanceId string
-	zone       string
+	region     string
 	active     bool
+	cluster    *Cluster
 }
 
-// cluster id -> cluster object
-var clusters = map[string]Cluster{}
+// cluster_ns#cluster_name -> cluster object
+var clusters = map[string]*Cluster{}
 
-func CreateOrUpdateCluster(clusterName, clusterNamespace, primaryInstanceId string, numStandby int) Cluster {
-	if clus, ok := clusters[clusterName]; ok {
+func clusterKey(clusterNamespace, clusterName string) (clusterKey string) {
+	return clusterNamespace + "#" + clusterName
+}
+
+// RegisterOrUpdateCluster will register a cluster if it does not exist yet or update
+// an existing cluster.
+func RegisterOrUpdateCluster(clusterNamespace, clusterName, primaryInstanceId, desiredPrimaryId string, numStandby int) *Cluster {
+	key := clusterKey(clusterNamespace, clusterName)
+	if clus, ok := clusters[key]; ok {
 		clus.primary = primaryInstanceId
-		clus.standbies = numStandby
+		clus.syncNum = numStandby
 		clus.namespace = clusterNamespace
-		clusters[clusterName] = clus
+		clus.desiredPrimary = desiredPrimaryId
 	} else {
-		clusters[clusterName] = Cluster{
-			instances: map[string]instance{},
-			namespace: clusterNamespace,
-			name:      clusterName,
-			primary:   primaryInstanceId,
-			standbies: numStandby,
+		clusters[key] = &Cluster{
+			instances:      map[string]*Instance{},
+			namespace:      clusterNamespace,
+			name:           clusterName,
+			primary:        primaryInstanceId,
+			desiredPrimary: desiredPrimaryId,
+			syncNum:        numStandby,
 		}
 	}
-	return clusters[clusterName]
+	return clusters[key]
 }
 
-func dropCluster(clusterName string) {
-	delete(clusters, clusterName)
+func dropCluster(clusterNamespace, clusterName string) {
+	delete(clusters, clusterKey(clusterNamespace, clusterName))
 }
 
-// GetLeastUsedZone returns the name of the AZ, where currently the least amount of
-// instances for the cluster are running in.
-func GetLeastUsedZone(clusterName string) string {
-	instancesPerZone := make(map[string]int)
-	for _, zn := range nodes.GetHealthyZones() {
-		// init map with 0 instances
-		instancesPerZone[zn] = 0
-	}
-	if clus, ok := clusters[clusterName]; ok {
-		for _, inst := range clus.instances {
-			if inst.active {
-				// increase number of instances per zone for each active instance
-				instancesPerZone[inst.zone] = instancesPerZone[inst.zone] + 1
-			}
-		}
-	}
-	min := MaxInt
-	// iterate through all zones and check, which one has the least amount of instances
-	for _, numberOfInstances := range instancesPerZone {
-		if numberOfInstances < min {
-			min = numberOfInstances
-		}
-	}
-	// check all zones again and return the one, where the actual count equals the
-	// calculated minimum
-	for zn, count := range instancesPerZone {
-		if count == min {
-			return zn
-		}
-	}
-	// should never happen
-	return ""
+func GetCluster(clusterNamespace, clusterName string) *Cluster {
+	return clusters[clusterKey(clusterNamespace, clusterName)]
+}
+
+func (clus *Cluster) GetName() string {
+	return clus.name
 }
 
 // GetCurrentPrimaryInstanceId returns the ID string for the current primary instance
 // of the cluster. An empty string is returned if no primary instance is set yet.
-func GetCurrentPrimaryInstanceId(clusterName string) string {
-	if clus, ok := clusters[clusterName]; ok {
-		return clus.primary
-	}
-	return ""
+func (clus *Cluster) GetCurrentPrimaryInstanceId() string {
+	return clus.primary
 }
 
-// isSyncReplica tells if the instance with the given ID is a sync-replica in the
-// cluster
-func isSyncReplica(clusterName, instanceId string) bool {
-	if clus, ok := clusters[clusterName]; ok {
-		// get the maximum possible index of a sync-replica instance; PG-operator takes the
-		// first instances after the primary as sync
-		maxStandbyIndex := clus.standbies + 1
-		if instanceIndex, err := strconv.Atoi(instanceId); err == nil {
-			return instanceIndex <= maxStandbyIndex
+func (clus *Cluster) GetDesiredPrimaryInstanceId() string {
+	return clus.desiredPrimary
+}
+
+func (clus *Cluster) GetInstances() []*Instance {
+	instances := slices.Collect(maps.Values(clus.instances))
+	sort.Slice(instances, func(i, j int) bool {
+		return strings.Compare(instances[i].instanceId, instances[j].instanceId) <= 0
+	})
+	return instances
+}
+func (clus *Cluster) GetInstanceByName(instanceName string) *Instance {
+	instanceId := ExtractInstanceId(clus.name, instanceName)
+	return clus.instances[instanceId]
+}
+
+func (clus *Cluster) GetInstanceByID(instanceId string) *Instance {
+	return clus.instances[instanceId]
+}
+
+func (clus *Cluster) GetPrimaryInstance() *Instance {
+	return clus.instances[clus.primary]
+}
+
+func (clus *Cluster) RegisterOrUpdateInstance(instanceId, region string, isHealthy bool) *Instance {
+	if _, err := strconv.Atoi(instanceId); err != nil {
+		slog.Error(fmt.Sprintf("Instance could not be created, ID %s is not a number: %v", instanceId, err))
+		return nil
+	}
+	if inst, ok := clus.instances[instanceId]; ok {
+		inst.active = isHealthy
+		inst.region = region
+		return inst
+	}
+	inst := &Instance{
+		instanceId: instanceId,
+		region:     region,
+		active:     isHealthy,
+		cluster:    clus,
+	}
+	clus.instances[instanceId] = inst
+	return inst
+}
+
+func (clus *Cluster) MarkInactive(instanceId string) {
+	inst := clus.GetInstanceByID(instanceId)
+	if inst != nil {
+		inst.MarkInactive()
+	}
+}
+
+func (inst *Instance) GetRegion() string {
+	return inst.region
+}
+
+func (inst *Instance) IsActive() bool {
+	return inst.active
+}
+
+func (inst *Instance) MarkInactive() {
+	if inst.active {
+		slog.Info(fmt.Sprintf("Marking instance %s as not active", inst.instanceId))
+	}
+	inst.active = false
+}
+
+// IsSyncReplica tells if the instance is a sync-replica in the
+// cluster (which also includes the primary)
+func (inst *Instance) IsSyncReplica() bool {
+	activeReplicas := make([]string, 0)
+	for _, insta := range inst.cluster.GetInstances() {
+		if !insta.active {
+			continue
+		}
+		activeReplicas = append(activeReplicas, insta.instanceId)
+	}
+	slices.Sort(activeReplicas)
+
+	for i := 0; i < inst.cluster.syncNum+1; i++ {
+		if activeReplicas[i] == inst.instanceId {
+			return true
 		}
 	}
 	return false
 }
 
-// GetZoneForInstanceId returns the name of the AZ, where the instance with given
-// identifier is running in (empty string, if no AZ assigned yet).
-func GetZoneForInstanceId(clusterName, instanceId string) string {
-	if clus, ok := clusters[clusterName]; ok {
-		if inst, ok := clus.instances[instanceId]; ok {
-			return inst.zone
-		}
-	}
-	return ""
-}
+// ----- Methods, required for testing -----
 
-// GetOrAssignZoneToInstance will either return the name of a currently assigned AZ
-// for the instance, or it will assign the currently least-used AZ to the instance and
-// and return the new AZ name.
-func GetOrAssignZoneToInstance(clusterName, instanceId string) (string, error) {
-	zn := GetZoneForInstanceId(clusterName, instanceId)
-	if zn != "" {
-		return zn, nil
-	}
-	return SetZoneForInstanceId(clusterName, instanceId, GetLeastUsedZone(clusterName), false)
-}
-
-// SetZoneForInstanceId will assign the given AZ name to the instance in the internal
-// state map.
-func SetZoneForInstanceId(clusterName, instanceId, zoneName string, isHealthy bool) (string, error) {
-	return setZoneForInstanceIdInternal(clusterName, instanceId, zoneName, isHealthy, false)
-}
-
-func SetZoneForInstanceIdIgnoreHealth(clusterName, instanceId, zoneName string) (string, error) {
-	return setZoneForInstanceIdInternal(clusterName, instanceId, zoneName, true, true)
-}
-
-func setZoneForInstanceIdInternal(clusterName, instanceId, zoneName string, isHealthy, ignoreHealth bool) (string, error) {
-	if _, ok := clusters[clusterName]; !ok {
-		slog.Debug(fmt.Sprintf("Cluster %s not registered yet; creating it...", clusterName))
-		CreateOrUpdateCluster(clusterName, "", "", 0)
-	}
-	clus := clusters[clusterName]
-	if inst, ok := clus.instances[instanceId]; ok {
-		if inst.zone != zoneName {
-			slog.Info(fmt.Sprintf("Updating zone for instance %s from %s to %s", instanceId, inst.zone, zoneName))
-		}
-		inst.zone = zoneName
-		if !ignoreHealth {
-			inst.active = isHealthy
-		}
-		clus.instances[instanceId] = inst
-	} else {
-		slog.Info(fmt.Sprintf("Assiging zone %s to instance %s", zoneName, instanceId))
-		clus.instances[instanceId] = instance{
-			instanceId: instanceId,
-			zone:       zoneName,
-			active:     isHealthy,
-		}
-	}
-	clusters[clusterName] = clus
-	return zoneName, nil
-}
-
-// DropInstanceId will remove an instance-AZ assignment from the internal state.
-func DropInstanceId(clusterName, instanceId string) {
-	if clus, ok := clusters[clusterName]; ok {
-		if inst, ok := clus.instances[instanceId]; ok {
-			if inst.active {
-				slog.Info(fmt.Sprintf("Deleting instance %s from internal state", instanceId))
-			}
-			inst.active = false
-			clus.instances[instanceId] = inst
-		}
-		clusters[clusterName] = clus
-	}
+func (clus *Cluster) SetPrimary(instanceId string) {
+	clus.primary = instanceId
 }

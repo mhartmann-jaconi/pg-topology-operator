@@ -5,10 +5,8 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/jaconi-io/ipoque-pg-webhook/pkg/config"
+	"github.com/jaconi-io/ipoque-pg-webhook/pkg/cluster"
 	postgres "github.com/jaconi-io/ipoque-pg-webhook/pkg/postgres"
-	"github.com/jaconi-io/ipoque-pg-webhook/pkg/util"
-	"github.com/spf13/viper"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -26,7 +24,6 @@ var _ reconcile.Reconciler = &Reconciler{}
 // Reconcile will fill the internal postgres state map with instance-AZ-mapping
 // information
 func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
-	slog.Debug(fmt.Sprintf("Reconciling pod %s...", request.Name))
 	var pod = &v1.Pod{}
 	if err := r.Client.Get(ctx, request.NamespacedName, pod); err != nil {
 		if errors.IsNotFound(err) {
@@ -36,29 +33,74 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		slog.Error(fmt.Sprintf("failed to read pod: %v", err))
 		return reconcile.Result{}, err
 	}
-	_, ok := pod.Labels[postgres.LabelPGInstanceName]
-	if !ok {
+	if _, ok := pod.Labels[postgres.LabelPGInstanceName]; !ok {
 		// not a PG instance
+		return reconcile.Result{}, nil
+	}
+	if _, ok := pod.Labels[postgres.LabelPGJobRole]; ok {
+		// a setup job, ignore
 		return reconcile.Result{}, nil
 	}
 
 	clusterName := postgres.GetClusterName(pod.Labels)
 	instanceId := postgres.GetInstanceId(pod.Labels)
 
+	clus := postgres.GetCluster(pod.Namespace, clusterName)
+	if clus == nil {
+		// cluster not existing in internal state
+		slog.Warn(fmt.Sprintf("Cluster %s not existing, skip processing of %s", clusterName, pod.Name))
+		return reconcile.Result{}, nil
+	}
+
 	if pod.DeletionTimestamp != nil {
-		// delete instance from internal state
-		postgres.DropInstanceId(clusterName, instanceId)
+		// inactive instance from internal state
+		clus.MarkInactive(instanceId)
+		// check if we need to initiate a switchover
+		if postgres.IsPrimary(pod.Labels) && postgres.IsHealthy(clusterName, pod.Namespace) {
+			return reconcile.Result{}, doSwitchover(pod.Name, clus)
+		}
 		return reconcile.Result{}, nil
 	}
-	if len(pod.Spec.NodeSelector) < 1 {
-		// no node selector set, ignore events until node selector got applied
+	if len(pod.Spec.NodeName) < 1 {
+		// no node applied, ignore events until node name got applied
 		return reconcile.Result{}, nil
 	}
 
-	zoneName := pod.Spec.NodeSelector[viper.GetString(config.LabelZone)]
-	_, err := postgres.SetZoneForInstanceId(clusterName, instanceId, zoneName, util.PodIsHealthy(pod))
+	nodeName := pod.Spec.NodeName
+	region := cluster.GetRegionOfNode(nodeName)
+	podIsHealthy := isHealthy(pod)
 
-	return reconcile.Result{}, err
+	clus.RegisterOrUpdateInstance(instanceId, region, podIsHealthy)
+
+	if !podIsHealthy &&
+		postgres.IsPrimary(pod.Labels) &&
+		postgres.IsHealthy(clusterName, pod.Namespace) {
+		// initiate switchover proactive
+		return reconcile.Result{}, doSwitchover(pod.Name, clus)
+	}
+
+	return reconcile.Result{}, nil
+}
+
+func doSwitchover(currentPrimary string, clus *postgres.Cluster) error {
+	slog.Info(fmt.Sprintf("Primary instance %s unhealthy in cluster %s. Initiating switchover", currentPrimary, clus.GetName()))
+	if err := postgres.InitiateSwitchover(clus); err != nil {
+		slog.Error(fmt.Sprintf("Failed to initate switchover for cluster %s: %v", clus.GetName(), err))
+		return err
+	}
+	return nil
+}
+
+func isHealthy(pod *v1.Pod) bool {
+	if pod.Status.Phase != v1.PodRunning {
+		return false
+	}
+	for _, con := range pod.Status.ContainerStatuses {
+		if !con.Ready {
+			return false
+		}
+	}
+	return true
 }
 
 func InitController(mgr manager.Manager) {

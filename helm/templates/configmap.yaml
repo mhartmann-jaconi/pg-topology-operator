@@ -9,11 +9,9 @@ data:
       namespace: {{ .Release.Namespace }}
     pod:
       port: {{ .Values.ports.tls }}
-    postgres:
-      volumes:
-        {{- toYaml  .Values.topology.volumes | nindent 8 }}
+    certificate:
+      organization: {{ .Values.webhook.organization }}
     topology:
-      label_zone: {{ .Values.topology.labels.zone }}
       label_region: {{ .Values.topology.labels.region }}
       label_leader: {{ .Values.topology.labels.leader }}
     log:

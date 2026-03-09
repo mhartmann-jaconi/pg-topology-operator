@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"time"
 
 	"github.com/jaconi-io/ipoque-pg-webhook/pkg/cluster"
 	"github.com/jaconi-io/ipoque-pg-webhook/pkg/config"
@@ -13,8 +12,6 @@ import (
 	"github.com/spf13/viper"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/util/wait"
-	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
@@ -32,7 +29,15 @@ type defaulter struct {
 }
 
 func (defaulter) Default(_ context.Context, pod *corev1.Pod) error {
+	slog.Debug(fmt.Sprintf("Check if we can apply node selector to pod %s...", pod.Name))
+	if pod.Name == "" {
+
+	}
 	if _, ok := pod.Labels[postgres.LabelPGClusterName]; !ok {
+		slog.Debug(fmt.Sprintf("Skip pod %s as it is not a PG instance", pod.Name))
+		for k, v := range pod.Labels {
+			slog.Debug(fmt.Sprintf("NO_PG: %s: %s", k, v))
+		}
 		return nil
 	}
 
@@ -43,38 +48,41 @@ func (defaulter) Default(_ context.Context, pod *corev1.Pod) error {
 	return nil
 }
 
+// applyNodeSelector attaches a node selector to the first occurrence of a primary pod
+// of the PG cluster. All other topology constraints are set by K8s mechanics itself.
 func applyNodeSelector(pod *corev1.Pod) error {
 	clusterName := postgres.GetClusterName(pod.Labels)
-	instanceId := postgres.GetInstanceId(pod.Labels)
-
-	labelZone := viper.GetString(config.LabelZone)
-
-	if len(pod.Spec.NodeSelector) > 0 {
-		slog.Info(fmt.Sprintf("pod %s already has node selector applied", pod.Name))
+	clus := postgres.GetCluster(pod.Namespace, clusterName)
+	if clus == nil {
+		slog.Warn(fmt.Sprintf("Cluster %s not existing yet, skip instance %s", clusterName, pod.Name))
+		return fmt.Errorf("cluster %s not found", clusterName)
+	}
+	if clus.GetCurrentPrimaryInstanceId() != "" {
+		slog.Debug(fmt.Sprintf("Ignore pod %s in %s for webhook, as a primary instance is already stored", pod.Name, clusterName))
+		// already processed
+		return nil
+	}
+	if !isInitialPrimary(pod) {
+		// ignore
+		slog.Debug(fmt.Sprintf("Ignore pod %s in %s for webhook, as it is not a primary instance", pod.Name, clusterName))
 		return nil
 	}
 
-	// We need to wait for PVC to get it's zone assigned. If we would do that for pvc and
-	// pod, we could run into race conditions, where both get a different zone applied.
-	return retry.OnError(wait.Backoff{
-		Duration: 1 * time.Second,
-		Factor:   1.0,
-		Steps:    30,
-		Jitter:   0.0,
-	}, func(err error) bool { return true }, func() error {
-		if zoneName := postgres.GetZoneForInstanceId(clusterName, instanceId); zoneName != "" {
-			// PVC mutation already ran through, apply the zone to pod
-			attachTopologyLabels(pod, zoneName)
-			pod.Spec.NodeSelector = map[string]string{
-				labelZone: zoneName,
-			}
-			return nil
-		}
-		return fmt.Errorf("instance %s has no zone assigned yet", instanceId)
-	})
+	labelRegion := viper.GetString(config.LabelRegion)
+	primaryRegion := cluster.GetPrimaryRegion()
+
+	slog.Info(fmt.Sprintf("Applying selector for region %s on pod %s", primaryRegion, pod.Name))
+
+	pod.Spec.NodeSelector = map[string]string{
+		labelRegion: primaryRegion,
+	}
+	return nil
 }
 
-func attachTopologyLabels(pod *corev1.Pod, zone string) {
-	pod.ObjectMeta.Labels[viper.GetString(config.LabelZone)] = zone
-	pod.ObjectMeta.Labels[viper.GetString(config.LabelRegion)] = cluster.GetRegionForZone(zone)
+func isInitialPrimary(pod *corev1.Pod) bool {
+	if postgres.IsPrimary(pod.Labels) {
+		return true
+	}
+	// on initial setup, first PG pod does not have primary label attached, so we need to check the instance number
+	return postgres.GetInstanceId(pod.Labels) == "1"
 }

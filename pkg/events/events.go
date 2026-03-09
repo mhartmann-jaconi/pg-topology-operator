@@ -6,19 +6,19 @@ import (
 	"github.com/maniartech/signals"
 )
 
-// Event-Stream, notifying that the primary AZ has changed
-var PrimaryAZChanged *signals.AsyncSignal[string]
+// Event-Stream, notifying that the primary region has changed
+var PrimaryRegionChanged *signals.AsyncSignal[string]
 
-func AddListenerForAZChange(listener func(ctx context.Context, s string)) {
-	if PrimaryAZChanged == nil {
-		PrimaryAZChanged = signals.New[string]()
+func AddListenerForRegionChange(listener func(ctx context.Context, s string)) {
+	if PrimaryRegionChanged == nil {
+		PrimaryRegionChanged = signals.New[string]()
 	}
-	PrimaryAZChanged.AddListener(listener)
+	PrimaryRegionChanged.AddListener(listener)
 }
 
-func SetListenersForAZChange(listeners ...func(ctx context.Context, s string)) {
-	PrimaryAZChanged = signals.New[string]()
+func SetListenersForRegionChange(listeners ...func(ctx context.Context, s string)) {
+	PrimaryRegionChanged = signals.New[string]()
 	for _, l := range listeners {
-		AddListenerForAZChange(l)
+		AddListenerForRegionChange(l)
 	}
 }

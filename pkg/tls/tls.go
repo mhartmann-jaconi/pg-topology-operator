@@ -21,9 +21,6 @@ const CertFile = CertDir + "tls.crt"
 const KeyFile = CertDir + "tls.key"
 const caFile = CertDir + "ca.pem"
 
-// TODO make configurable
-const organization = "jaconi.io"
-
 // Generate creates a certificate and key for TLS communication and stores them in [CertDir].
 // This certificate will be signed by a CA, which is retrieved afterwards.
 //
@@ -38,6 +35,8 @@ func Generate() (*bytes.Buffer, error) {
 		}
 		return bytes.NewBuffer(ca), nil
 	}
+
+	organization := viper.GetString(config.CertificateOrganization)
 
 	slog.Info("Generating certificates")
 	var caPEM, serverCertPEM, serverPrivKeyPEM *bytes.Buffer

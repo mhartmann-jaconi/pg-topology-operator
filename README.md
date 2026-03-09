@@ -1,10 +1,20 @@
 # ipoque-pg-webhook
 
-This webhook is responsible for assigning a
-[zone](https://kubernetes.io/docs/reference/labels-annotations-taints/#topologykubernetesiozone)-based
-[`nodeSelector`](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#nodeselector) to Pods and PVCs
-created by [cloudnative-pg](https://cloudnative-pg.io/). In addition, this will also make sure that the primary Postgres
-instance is always running in the primary zone.
+This webhook is responsible for assigning a [region](https://kubernetes.io/docs/reference/labels-annotations-taints/#topologykubernetesiozone)-based [`nodeSelector`](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#nodeselector) to PG primary Pod, created by [cloudnative-pg](https://cloudnative-pg.io/). In addition, this will also make sure that the primary Postgres instance is always running in the primary region.
+
+## Responsibilities
+
+### Controllers
+
+The **node controller** watches for K8s node events and stores information about all existing regions and which one is the primary region internally.
+
+The **postgres controller** watches for PG cluster resources and stores information about number of standbies and current and desired primary instance.
+
+The **pod controller** watches for K8s pods, belonging to PG clusters, and stores information about it's region and healthstate internally.
+
+### Webhooks
+
+The **pod webhook** intercepts K8s pod creation and applies a node selector to primary instances, based on the region, which will point to the current primary region.
 
 ## Installation
 
@@ -17,8 +27,8 @@ helm install pg-topology helm -n cnpg-system
 ### docker
 
 ```
-docker build . -f Dockerfile -t docker.lp.rsint.net/platform/pg-topology-operator:v0.7.3
-docker push docker.lp.rsint.net/platform/pg-topology-operator:v0.7.3
+docker build . -f Dockerfile -t docker.lp.rsint.net/platform/pg-topology-operator:v0.8.0
+docker push docker.lp.rsint.net/platform/pg-topology-operator:v0.8.0
 ```
 
 ### helm

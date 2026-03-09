@@ -11,7 +11,6 @@ import (
 	"github.com/jaconi-io/ipoque-pg-webhook/pkg/config"
 	"github.com/jaconi-io/ipoque-pg-webhook/pkg/pods"
 	"github.com/jaconi-io/ipoque-pg-webhook/pkg/postgres"
-	"github.com/jaconi-io/ipoque-pg-webhook/pkg/pvcs"
 	"github.com/jaconi-io/ipoque-pg-webhook/pkg/webhook"
 
 	pgapi "github.com/cloudnative-pg/cloudnative-pg/api/v1"
@@ -74,14 +73,10 @@ func main() {
 				return fmt.Errorf("failed to setup pod webhook: %w", err)
 			}
 
-			if err = pvcs.Setup(mgr); err != nil {
-				return fmt.Errorf("failed to setup PVC webhook: %w", err)
-			}
-
-			// add a health check which verifies that at least the primary zone is known
+			// add a health check which verifies that at least the primary region is known
 			mgr.AddReadyzCheck("primary", func(req *http.Request) error {
-				if cluster.GetPrimaryZone() == "" {
-					return errors.New("no primary zone yet")
+				if cluster.GetPrimaryRegion() == "" {
+					return errors.New("no primary region yet")
 				}
 
 				return nil
@@ -98,7 +93,7 @@ func main() {
 			}
 
 			// Update the webhook configurations inside the cluster.
-			err = webhook.Update(cmd.Context(), client, caCert, pods.MutationConfigName, pvcs.MutationConfigName)
+			err = webhook.Update(cmd.Context(), client, caCert, pods.MutationConfigName)
 			if err != nil {
 				return err
 			}
@@ -106,7 +101,6 @@ func main() {
 			// initialize all controllers
 			cluster.InitController(mgr)
 			pods.InitController(mgr)
-			pvcs.InitController(mgr)
 			postgres.InitController(mgr)
 
 			return mgr.Start(signals.SetupSignalHandler())

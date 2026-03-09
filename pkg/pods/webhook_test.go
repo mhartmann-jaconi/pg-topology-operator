@@ -13,46 +13,54 @@ import (
 )
 
 const clusterName = "pg"
-const zoneLabel = "topology.kubernetes.io/zone"
+const regionLabel = "topology.kubernetes.io/region"
 
 func TestApplyNodeSelector(t *testing.T) {
 	g := NewWithT(t)
 
-	viper.Set(config.LabelZone, zoneLabel)
+	viper.Set(config.LabelRegion, regionLabel)
 	defer viper.Reset()
+	cluster.Store("node1", "region1", true)
+	cluster.Store("node2", "region2", false)
+
+	// cluster not existing
+	pod1 := createPod("1", "region1", false)
+	err := applyNodeSelector(pod1)
+	g.Expect(err).To(HaveOccurred())
 
 	// nothing should change, as the node selector is already applied
-	pod1 := createPod("1", "zone", false)
-	err := applyNodeSelector(pod1)
+	clus := postgres.RegisterOrUpdateCluster("", clusterName, "", "", 2)
+	err = applyNodeSelector(pod1)
 	g.Expect(err).To(BeNil())
-	g.Expect(pod1.Spec.NodeSelector[zoneLabel]).To(Equal("zone"))
+	g.Expect(pod1.Spec.NodeSelector[regionLabel]).To(Equal("region1"))
 
-	// already a zone registered for instance, which should get applied
-	postgres.CreateOrUpdateCluster(clusterName, "", "", 2)
-	postgres.SetZoneForInstanceId(clusterName, "2", "zone2", true)
+	// pod has neither primary label nor is it instance ID '1'
 	pod2 := createPod("2", "", false)
 	err = applyNodeSelector(pod2)
 	g.Expect(err).To(BeNil())
-	g.Expect(pod2.Spec.NodeSelector[zoneLabel]).To(Equal("zone2"))
+	g.Expect(pod2.Spec.NodeSelector).To(BeEmpty())
 
-	// primary instance should get primary zone
-	cluster.Store("node3", "zone3", "region", true)
-	cluster.Store("node4", "zone4", "region", false)
-	postgres.SetZoneForInstanceId(clusterName, "3", "zone3", true)
+	// pod has primary label applied so it gets a nodeselector
 	pod3 := createPod("3", "", true)
 	err = applyNodeSelector(pod3)
 	g.Expect(err).To(BeNil())
-	g.Expect(pod3.Spec.NodeSelector[zoneLabel]).To(Equal("zone3"))
+	g.Expect(pod3.Spec.NodeSelector[regionLabel]).To(Equal("region1"))
 
-	// a non-primary pod should get the least used zone applied
-	postgres.SetZoneForInstanceId(clusterName, "4", "zone4", true)
-	pod4 := createPod("4", "", false)
-	err = applyNodeSelector(pod4)
+	// pod has no primary label, but instance ID '1'; so it should get the label
+	pod1 = createPod("1", "", false)
+	err = applyNodeSelector(pod1)
 	g.Expect(err).To(BeNil())
-	g.Expect(pod4.Spec.NodeSelector[zoneLabel]).To(Equal("zone4"))
+	g.Expect(pod1.Spec.NodeSelector[regionLabel]).To(Equal("region1"))
+
+	// cluster has primary initialized, so nothing should change at all from now on
+	clus.SetPrimary("1")
+	pod1 = createPod("1", "", false)
+	err = applyNodeSelector(pod1)
+	g.Expect(err).To(BeNil())
+	g.Expect(pod1.Spec.NodeSelector).To(BeEmpty())
 }
 
-func createPod(idx, zone string, primary bool) *corev1.Pod {
+func createPod(idx, region string, primary bool) *corev1.Pod {
 	pd := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: clusterName + "-" + idx,
@@ -66,10 +74,10 @@ func createPod(idx, zone string, primary bool) *corev1.Pod {
 			Phase: corev1.PodRunning,
 		},
 	}
-	if zone != "" {
+	if region != "" {
 		pd.Spec = corev1.PodSpec{
 			NodeSelector: map[string]string{
-				zoneLabel: zone,
+				regionLabel: region,
 			},
 		}
 	}

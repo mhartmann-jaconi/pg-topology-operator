@@ -28,7 +28,6 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	var node = &v1.Node{}
 	if err := r.Client.Get(ctx, request.NamespacedName, node); err != nil {
 		if errors.IsNotFound(err) {
-			Drop(request.Name)
 			return reconcile.Result{}, nil
 		}
 		slog.Error(fmt.Sprintf("failed to read node: %v", err))
@@ -36,16 +35,13 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	}
 
 	if !isHealthy(node) {
-		// node is unhealthy, remove it from internal state
-		Drop(request.Name)
 		return reconcile.Result{}, nil
 	}
 
 	region := node.Labels[viper.GetString(config.LabelRegion)]
-	zone := node.Labels[viper.GetString(config.LabelZone)]
 	_, isLeader := node.Labels[viper.GetString(config.LabelLeader)]
 
-	Store(request.Name, zone, region, isLeader)
+	Store(node.Name, region, isLeader)
 
 	return reconcile.Result{}, nil
 }

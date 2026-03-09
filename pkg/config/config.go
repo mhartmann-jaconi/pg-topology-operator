@@ -15,38 +15,31 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-var (
-	pgVolumes map[string]string
-)
-
 const (
-	LabelZone   = "topology.label_zone"
 	LabelRegion = "topology.label_region"
 	LabelLeader = "topology.label_leader"
-
-	PgVolumes = "postgres.volumes"
 
 	PodPort = "pod.port"
 
 	ServiceName      = "service.name"
 	ServiceNamespace = "service.namespace"
 
+	CertificateOrganization = "certificate.organization"
+
 	LogJson  = "log.json"
 	LogLevel = "log.level"
 )
 
 func Bootstrap(rootCmd *cobra.Command) {
-	rootCmd.Flags().String(LabelZone, "topology.kubernetes.io/zone", "nodel label for AZ")
 	rootCmd.Flags().String(LabelRegion, "topology.kubernetes.io/region", "node label for region")
 	rootCmd.Flags().String(LabelLeader, "zone-leader", "node label to identify primary zone")
-
-	pgVolumes = map[string]string{}
-	rootCmd.Flags().StringToStringVar(&pgVolumes, PgVolumes, map[string]string{}, "storage class per region map")
 
 	rootCmd.Flags().Int(PodPort, 9443, "container port, service TLS traffic for webhook")
 
 	rootCmd.Flags().String(ServiceName, "", "name of the webhook implementation K8s service")
 	rootCmd.Flags().String(ServiceNamespace, "", "namespace of the webhook implementation K8s service")
+
+	rootCmd.Flags().String(CertificateOrganization, "", "name of organization for webhook certificates")
 
 	rootCmd.Flags().Bool(LogJson, false, "output logs in JSON format")
 	rootCmd.Flags().String(LogLevel, "info", "log level")

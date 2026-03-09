@@ -9,128 +9,101 @@ import (
 	"github.com/spf13/viper"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 const clusterName = "pg"
 const clusterNamespace = "default"
 
-func Test_findNewEligibleTargetInstance(t *testing.T) {
+var clus *Cluster
+
+func Test_isEligibleForID(t *testing.T) {
 	g := NewWithT(t)
 
 	defer viper.Reset()
 
 	setup()
 
-	// test region fallback
-	pd1 := createPod("1", "east-1", "east", true)
-	pd1.Status.Phase = corev1.PodFailed
-	pd2 := createPod("2", "east-2", "east", false)
+	inst1 := clus.RegisterOrUpdateInstance("1", "east", true)
+	inst2 := clus.RegisterOrUpdateInstance("2", "east", true)
+	inst3 := clus.RegisterOrUpdateInstance("3", "west", true)
+	inst4 := clus.RegisterOrUpdateInstance("4", "east", false)
+	inst5 := clus.RegisterOrUpdateInstance("5", "west", false)
+	inst6 := clus.RegisterOrUpdateInstance("6", "east", true)
+	clus.desiredPrimary = "1"
+	clus.primary = "1"
 
-	cli = fake.NewClientBuilder().WithObjects(pd1, pd2).Build()
+	// current primary
+	val, _ := isEligible(inst1, false)
+	g.Expect(val).To(BeTrue())
 
-	eligiblePod, err := findNewEligibleTargetInstance(clusters[clusterName], false)
-	g.Expect(err).To(BeNil())
-	g.Expect(eligiblePod).To(Equal("pg-2"))
+	// other sync instance in same region
+	val, _ = isEligible(inst2, false)
+	g.Expect(val).To(BeTrue())
+
+	// non-sync instance in same region, but don't check for sync status
+	val, _ = isEligible(inst6, false)
+	g.Expect(val).To(BeTrue())
+
+	// non-sync instance in same region, but sync status must be checked
+	val, _ = isEligible(inst6, true)
+	g.Expect(val).To(BeFalse())
+
+	// unhealthy instance in same region
+	val, _ = isEligible(inst4, false)
+	g.Expect(val).To(BeFalse())
+
+	// sync instance in different region
+	val, _ = isEligible(inst3, false)
+	g.Expect(val).To(BeFalse())
+
+	// unhealthy instance in different region
+	val, _ = isEligible(inst5, false)
+	g.Expect(val).To(BeFalse())
 }
 
-func Test_findNewEligibleTargetInstanceInternal(t *testing.T) {
-	g := NewWithT(t)
-
-	defer viper.Reset()
-
-	setup()
-
-	eligiblePod, err := findNewEligibleTargetInstanceInternal(clusters[clusterName], true, false)
-	g.Expect(err).To(BeNil())
-	g.Expect(eligiblePod).To(Equal("pg-1"))
-
-	eligiblePod, err = findNewEligibleTargetInstanceInternal(clusters[clusterName], false, false)
-	g.Expect(err).To(BeNil())
-	g.Expect(eligiblePod).To(Equal("pg-1"))
-
-	eligiblePod, err = findNewEligibleTargetInstanceInternal(clusters[clusterName], false, true)
-	g.Expect(err).To(BeNil())
-	g.Expect(eligiblePod).To(Equal("pg-2"))
-
-	eligiblePod, err = findNewEligibleTargetInstanceInternal(clusters[clusterName], true, true)
-	g.Expect(err).To(BeNil())
-	g.Expect(eligiblePod).To(BeEmpty())
-
-	// simulate that the primary primary zone changed
-	cluster.Store("node3", "west-1", "west", true)
-
-	eligiblePod, err = findNewEligibleTargetInstanceInternal(clusters[clusterName], true, false)
-	g.Expect(err).To(BeNil())
-	g.Expect(eligiblePod).To(Equal("pg-3"))
-
-	// simualte that pg-3 is not a sync-replica anymore, then no result should be returned
-	clus := clusters[clusterName]
-	clus.standbies = 1
-	clusters[clusterName] = clus
-
-	eligiblePod, err = findNewEligibleTargetInstanceInternal(clusters[clusterName], true, false)
-	g.Expect(err).To(BeNil())
-	g.Expect(eligiblePod).To(BeEmpty())
-}
+// ----- HELPERS ------
 
 func setup() {
 	viper.Set(config.LogLevel, "debug")
 	viper.Set(config.LabelRegion, "topology.kubernetes.io/region")
-	viper.Set(config.LabelZone, "topology.kubernetes.io/zone")
 	config.InitLogging()
-	viper.Set(config.PgVolumes, map[string]string{
-		"east": "sc-east",
-		"west": "sc-west",
-	})
-	cluster.Store("node1", "east-1", "east", true)
-	cluster.Store("node2", "east-2", "east", false)
-	cluster.Store("node3", "west-1", "west", false)
+	cluster.Store("node1", "east", true)
+	cluster.Store("node2", "east", true)
+	cluster.Store("node3", "west", false)
 
-	clusters = map[string]Cluster{
-		clusterName: {
-			name:      clusterName,
-			namespace: clusterNamespace,
-			standbies: 2,
-			instances: map[string]instance{},
-		},
+	clus = &Cluster{
+		name:      clusterName,
+		namespace: clusterNamespace,
+		syncNum:   2,
+		instances: map[string]*Instance{},
 	}
-
-	pd1 := createPod("1", "east-1", "east", true)
-	pd2 := createPod("2", "east-2", "east", false)
-	pd3 := createPod("3", "west-1", "west", false)
-	pd4 := createPod("4", "east-1", "east", false)
-
-	cli = fake.NewClientBuilder().WithObjects(pd1, pd2, pd3, pd4).Build()
 }
 
-func createPod(idx, zone, region string, primary bool) *corev1.Pod {
+func createPod(idx, region string, primary bool) *corev1.Pod {
 	pd := &corev1.Pod{
 		ObjectMeta: v1.ObjectMeta{
 			Name:      clusterName + "-" + idx,
 			Namespace: clusterNamespace,
 			Labels: map[string]string{
-				LabelPGClusterName:              clusterName,
-				LabelPGInstanceRole:             PGRoleReplica,
-				LabelPGInstanceName:             clusterName + "-" + idx,
-				"topology.kubernetes.io/region": region,
+				LabelPGClusterName:  clusterName,
+				LabelPGInstanceRole: PGRoleReplica,
+				LabelPGInstanceName: clusterName + "-" + idx,
 			},
 		},
 		Spec: corev1.PodSpec{
 			NodeSelector: map[string]string{
-				"topology.kubernetes.io/zone": zone,
+				"topology.kubernetes.io/region": region,
 			},
 		},
 		Status: corev1.PodStatus{
 			Phase: corev1.PodRunning,
 		},
 	}
-	clus := clusters[clusterName]
-	clus.instances[idx] = instance{instanceId: idx, zone: zone, active: true}
+	clus.RegisterOrUpdateInstance(idx, region, true)
 	if primary {
 		pd.ObjectMeta.Labels[LabelPGInstanceRole] = PGRolePrimary
 		clus.primary = idx
+		clus.desiredPrimary = idx
 	}
-	clusters[clusterName] = clus
 	return pd
 }

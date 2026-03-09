@@ -13,6 +13,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
+var mgr manager.Manager
+
 type Reconciler struct {
 	client.Client
 }
@@ -27,7 +29,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// cluster was deleted
-			dropCluster(cluster.Name)
+			dropCluster(cluster.Namespace, cluster.Name)
 			return reconcile.Result{}, nil
 		}
 		slog.Error(fmt.Sprintf("Failed to read cluster: %v", err))
@@ -36,19 +38,21 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 
 	if cluster.DeletionTimestamp != nil {
 		// cluster is in deletion
-		dropCluster(cluster.Name)
+		dropCluster(cluster.Namespace, cluster.Name)
 		return reconcile.Result{}, nil
 	}
 
 	clusterName := cluster.Name
 	primaryInstanceId := ExtractInstanceId(clusterName, cluster.Status.CurrentPrimary)
+	desiredPrimaryInstanceId := ExtractInstanceId(clusterName, cluster.Status.TargetPrimary)
 	standbies := getStandbyInstanceCount(cluster)
 
-	clus := CreateOrUpdateCluster(clusterName, request.Namespace, primaryInstanceId, standbies)
+	clus := RegisterOrUpdateCluster(request.Namespace, clusterName, primaryInstanceId, desiredPrimaryInstanceId, standbies)
 
 	if isClusterHealthy(cluster) {
+		slog.Debug(fmt.Sprintf("Cluster %s is healthy, trying to assign new primary instance", clus.name))
 		// cluster is healthy, try to re-shift primary instance if necessary
-		if err = changePrimaryFor(clus); err != nil {
+		if err = InitiateSwitchover(clus); err != nil {
 			slog.Error(fmt.Sprintf("Failed to change primary for cluster %s: %v", clus.name, err))
 			return reconcile.Result{}, err
 		}

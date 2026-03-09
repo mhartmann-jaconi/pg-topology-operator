@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/jaconi-io/ipoque-pg-webhook/pkg/config"
 	"github.com/jaconi-io/ipoque-pg-webhook/pkg/events"
 	. "github.com/onsi/gomega"
 	"github.com/spf13/viper"
@@ -12,85 +11,44 @@ import (
 
 func TestStore(t *testing.T) {
 	g := NewWithT(t)
-	viper.Set(config.PgVolumes, map[string]string{
-		"east": "sc-east",
-		"west": "sc-west",
-	})
 	defer cleanup()
 
-	count := 0
-	events.AddListenerForAZChange(func(ctx context.Context, s string) { count = count + 1 })
+	eventCounter := 0
+	events.AddListenerForRegionChange(func(ctx context.Context, s string) { eventCounter = eventCounter + 1 })
 
-	Store("node1", "east-1", "east", false)
-	Store("node2", "east-2", "east", false)
-	Store("node3", "west-1", "west", false)
-	Store("node4", "west-2", "west", false)
-	g.Expect(count).To(Equal(0))
+	Store("node1", "east", false)
+	Store("node2", "west", false)
+	g.Expect(eventCounter).To(Equal(0))
 
-	g.Expect(GetPrimaryZone()).To(BeEmpty())
+	g.Expect(GetPrimaryRegion()).To(BeEmpty())
 
-	Store("node2", "east-2", "east", true)
-	g.Expect(GetPrimaryZone()).To(Equal("east-2"))
-	g.Expect(count).To(Equal(1))
+	Store("node1", "east", true)
+	g.Expect(GetPrimaryRegion()).To(Equal("east"))
+	g.Expect(eventCounter).To(Equal(1))
 
-	Store("node3", "west-1", "west", true)
-	g.Expect(GetPrimaryZone()).To(Equal("west-1"))
-	g.Expect(count).To(Equal(2))
+	Store("node2", "west", true)
+	g.Expect(GetPrimaryRegion()).To(Equal("west"))
+	g.Expect(eventCounter).To(Equal(2))
 }
 
-func TestGetPrimaryZone(t *testing.T) {
+func TestGetPrimaryRegion(t *testing.T) {
 	g := NewWithT(t)
-	viper.Set(config.PgVolumes, map[string]string{
-		"east": "sc-east",
-		"west": "sc-west",
-	})
 	defer cleanup()
 
-	events.AddListenerForAZChange(func(ctx context.Context, s string) {})
+	events.AddListenerForRegionChange(func(ctx context.Context, s string) {})
 
-	Store("node1", "east-1", "east", false)
-	Store("node2", "east-2", "east", false)
-	Store("node3", "west-1", "west", false)
-	Store("node4", "west-2", "west", false)
-	g.Expect(GetPrimaryZone()).To(BeEmpty())
+	Store("node1", "east", false)
+	Store("node2", "west", false)
 
-	// make east-2 the primary az
-	Store("node2", "east-2", "east", true)
-	g.Expect(GetPrimaryZone()).To(Equal("east-2"))
+	g.Expect(GetPrimaryRegion()).To(BeEmpty())
 
-	// drop only node from east-2 and make this AZ unhealthy
-	Drop("node2")
-	g.Expect(GetPrimaryZone()).To(BeEmpty())
-}
-
-func TestGetHealthyZones(t *testing.T) {
-	g := NewWithT(t)
-	viper.Set(config.PgVolumes, map[string]string{
-		"east": "sc-east",
-	})
-	defer cleanup()
-
-	events.AddListenerForAZChange(func(ctx context.Context, s string) {})
-
-	Store("node1", "east-1", "east", false)
-	Store("node2", "east-2", "east", false)
-	Store("node3", "east-2", "east", false)
-
-	g.Expect(GetHealthyZones()).To(ContainElements("east-1", "east-2"))
-
-	Drop("node2")
-	g.Expect(GetHealthyZones()).To(ContainElements("east-1", "east-2"))
-
-	Drop("node3")
-	g.Expect(GetHealthyZones()).To(ContainElements("east-1"))
-
-	Drop("node1")
-	g.Expect(GetHealthyZones()).To(BeEmpty())
-	g.Expect(nodes).To(BeEmpty())
+	// make east the primary region
+	Store("node2", "west", true)
+	g.Expect(GetPrimaryRegion()).To(Equal("west"))
 }
 
 func cleanup() {
-	nodes = map[string]node{}
-	zones = map[string]Zone{}
+	nodes = map[string]string{}
+	regions = map[string]region{}
 	viper.Reset()
 }

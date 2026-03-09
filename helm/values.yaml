@@ -60,45 +60,29 @@ image:
   ## @param image.repository The controller image.
   repository: "docker.lp.rsint.net/platform/pg-topology-operator"
   ## @param image.tag The controller image tag.
-  tag: "v0.7.3"
+  tag: "v0.8.0"
   ## @param image.pullPolicy The controller image's pull policy.
   pullPolicy: "Always"
   ## @param image.pullSecrets The image pull secrets to use.
   pullSecrets: []
 
-## @section Ingress parameters
-ingress:
-  ## @param ingress.enabled Create an Ingress object, if 'true'
-  enabled: false 
-  ## @param ingress.annotations Ingress Annotations
-  annotations: {}
-  ## @param ingress.className Dedicated ingress class, blank for default
-  className: 
-  ## @param ingress.tlsSecret Name of secret, containing TLS certificates
-  tlsSecret:
-  ## @param ingress.host External host name
-  host: example.com
+webhook:
+  ## @param webhook.organization Name of the organization, used for webhook certificates
+  organization: "ipoque.com"
 
 ## @section Topology configuration parameters
 topology:
-  ## @param topology.volumes
-  # A map of region codes to PVC storage classes. Depending on the region,
-  # a PVC is created in, the appropriate storage class should be assigned.
-  volumes:
-    # region-1: storage-class-for-region-1
-    # region-2: storage-class-for-region-2
-    dc-01: vsphere-csi-wait # nfs-dc-01
-    dc-02: vsphere-csi-wait # nfs-dc-02
   labels:
-    ## @param topology.labels.zone The name of the node label, where the AZ of the node is mentioned
-    zone: topology.kubernetes.io/zone
     ## @param topology.labels.region The name of the node label, where the region of the node is mentioned
     region: topology.kubernetes.io/region
     ## @param topology.labels.leader The name of the node label; if existing, zone of this node is the primary zone
     leader: topology.ipoque.com/leader
-  ## @param topology.selector A label selector for watching Postgres clusters
+  ## @param topology.selector A K8s selector for watching Postgres clusters
   selector:
-    "kubernetes.io/metadata.name": "default"
+    objectSelector:
+      matchExpressions:
+        - key: "cnpg.io/cluster"
+          operator: "Exists"
 
 ## @section Logging configuration parameters
 logging:
