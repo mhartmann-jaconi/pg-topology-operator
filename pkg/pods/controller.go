@@ -55,10 +55,6 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	if pod.DeletionTimestamp != nil {
 		// inactive instance from internal state
 		clus.MarkInactive(instanceId)
-		// check if we need to initiate a switchover
-		if postgres.IsPrimary(pod.Labels) && postgres.IsHealthy(clusterName, pod.Namespace) {
-			return reconcile.Result{}, doSwitchover(pod.Name, clus)
-		}
 		return reconcile.Result{}, nil
 	}
 	if len(pod.Spec.NodeName) < 1 {
@@ -72,23 +68,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 
 	clus.RegisterOrUpdateInstance(instanceId, region, podIsHealthy)
 
-	if !podIsHealthy &&
-		postgres.IsPrimary(pod.Labels) &&
-		postgres.IsHealthy(clusterName, pod.Namespace) {
-		// initiate switchover proactive
-		return reconcile.Result{}, doSwitchover(pod.Name, clus)
-	}
-
 	return reconcile.Result{}, nil
-}
-
-func doSwitchover(currentPrimary string, clus *postgres.Cluster) error {
-	slog.Info(fmt.Sprintf("Primary instance %s unhealthy in cluster %s. Initiating switchover", currentPrimary, clus.GetName()))
-	if err := postgres.InitiateSwitchover(clus); err != nil {
-		slog.Error(fmt.Sprintf("Failed to initate switchover for cluster %s: %v", clus.GetName(), err))
-		return err
-	}
-	return nil
 }
 
 func isHealthy(pod *v1.Pod) bool {

@@ -16,6 +16,8 @@ The **pod controller** watches for K8s pods, belonging to PG clusters, and store
 
 The **pod webhook** intercepts K8s pod creation and applies a node selector to primary instances, based on the region, which will point to the current primary region.
 
+The **cluster webhook** intercepts PG cluster status changes and checks if it needs to change the selected target primary instance.
+
 ## Installation
 
 ```
@@ -27,8 +29,8 @@ helm install pg-topology helm -n cnpg-system
 ### docker
 
 ```
-docker build . -f Dockerfile -t docker.lp.rsint.net/platform/pg-topology-operator:v0.8.0
-docker push docker.lp.rsint.net/platform/pg-topology-operator:v0.8.0
+docker build . -f Dockerfile -t docker.lp.rsint.net/platform/pg-topology-operator:v0.9.0
+docker push docker.lp.rsint.net/platform/pg-topology-operator:v0.9.0
 ```
 
 ### helm

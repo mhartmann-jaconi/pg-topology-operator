@@ -72,6 +72,9 @@ func main() {
 			if err = pods.Setup(mgr); err != nil {
 				return fmt.Errorf("failed to setup pod webhook: %w", err)
 			}
+			if err = postgres.Setup(mgr); err != nil {
+				return fmt.Errorf("failed to setup cluster webhook: %w", err)
+			}
 
 			// add a health check which verifies that at least the primary region is known
 			mgr.AddReadyzCheck("primary", func(req *http.Request) error {
@@ -93,7 +96,7 @@ func main() {
 			}
 
 			// Update the webhook configurations inside the cluster.
-			err = webhook.Update(cmd.Context(), client, caCert, pods.MutationConfigName)
+			err = webhook.Update(cmd.Context(), client, caCert, pods.MutationConfigName, postgres.MutationConfigName)
 			if err != nil {
 				return err
 			}

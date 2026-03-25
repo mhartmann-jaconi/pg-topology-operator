@@ -29,9 +29,6 @@ func changePrimaryInstances(newLeadingZone string) error {
 }
 
 func InitiateSwitchover(clus *Cluster) error {
-	// TODO when we trust cnpg-operator in choosing the new primary, we might end up in a
-	//  state, where all sync-replicas run in a single region. So for now we require the
-	//  new primary to be a sync one and therfore we might end up with an additional switch-back
 	if alreadyChanged, _ := isEligible(clus.GetPrimaryInstance(), true); alreadyChanged {
 		slog.Debug(fmt.Sprintf("Eligible target primary already set on cluster %s", clus.name))
 		return nil

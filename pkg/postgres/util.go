@@ -1,13 +1,7 @@
 package postgres
 
 import (
-	"fmt"
-	"log/slog"
 	"strings"
-
-	pgapi "github.com/cloudnative-pg/cloudnative-pg/api/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const (
@@ -50,38 +44,4 @@ func ExtractInstanceId(clusterName, instanceName string) string {
 // labels is attached to
 func GetClusterName(labels map[string]string) string {
 	return labels[LabelPGClusterName]
-}
-
-func ReadDesiredPrimaryInstanceID(clusterName, clusterNamespace string) (string, error) {
-	clus, err := readCluster(clusterNamespace, clusterName)
-	if err != nil {
-		return "", err
-	}
-	return ExtractInstanceId(clusterName, clus.Status.TargetPrimary), nil
-}
-
-// IsHealthy retrieves if a PG cluster with given name and namespace is considered 'healthy'
-func IsHealthy(clusterName, clusterNamespace string) bool {
-	clus, err := readCluster(clusterNamespace, clusterName)
-	if err != nil {
-		if !errors.IsNotFound(err) {
-			slog.Error(fmt.Sprintf("Failed to read cluster %s: %v", clusterName, err))
-		}
-		return false
-	}
-	return isClusterHealthy(clus)
-}
-
-func isClusterHealthy(clus *pgapi.Cluster) bool {
-	// all status conditions must be 'true'
-	for _, con := range clus.Status.Conditions {
-		if con.Status != metav1.ConditionTrue {
-			return false
-		}
-	}
-	// current primary instance must match desired primary instance
-	if clus.Status.CurrentPrimary != clus.Status.TargetPrimary {
-		return false
-	}
-	return strings.EqualFold(clus.Status.Phase, "Cluster in healthy state")
 }

@@ -47,16 +47,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	desiredPrimaryInstanceId := ExtractInstanceId(clusterName, cluster.Status.TargetPrimary)
 	standbies := getStandbyInstanceCount(cluster)
 
-	clus := RegisterOrUpdateCluster(request.Namespace, clusterName, primaryInstanceId, desiredPrimaryInstanceId, standbies)
-
-	if isClusterHealthy(cluster) {
-		slog.Debug(fmt.Sprintf("Cluster %s is healthy, trying to assign new primary instance", clus.name))
-		// cluster is healthy, try to re-shift primary instance if necessary
-		if err = InitiateSwitchover(clus); err != nil {
-			slog.Error(fmt.Sprintf("Failed to change primary for cluster %s: %v", clus.name, err))
-			return reconcile.Result{}, err
-		}
-	}
+	RegisterOrUpdateCluster(request.Namespace, clusterName, primaryInstanceId, desiredPrimaryInstanceId, standbies)
 
 	return reconcile.Result{}, nil
 }

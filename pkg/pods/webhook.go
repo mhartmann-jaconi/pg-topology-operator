@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/viper"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
@@ -19,7 +20,8 @@ const mutationEndpoint string = "/mutate-pods"
 const MutationConfigName string = "postgres-pod-update"
 
 func Setup(mgr ctrl.Manager) error {
-	return ctrl.NewWebhookManagedBy(mgr, &corev1.Pod{}).
+	return ctrl.NewWebhookManagedBy(mgr).
+		For(&corev1.Pod{}).
 		WithDefaulter(&defaulter{}).
 		WithDefaulterCustomPath(mutationEndpoint).
 		Complete()
@@ -28,7 +30,12 @@ func Setup(mgr ctrl.Manager) error {
 type defaulter struct {
 }
 
-func (defaulter) Default(_ context.Context, pod *corev1.Pod) error {
+func (defaulter) Default(_ context.Context, obj runtime.Object) error {
+	pod, ok := obj.(*corev1.Pod)
+	if !ok {
+		slog.Warn(fmt.Sprintf("Invalid object type: %s", obj.GetObjectKind().GroupVersionKind().Kind))
+		return nil
+	}
 	slog.Debug(fmt.Sprintf("Check if we can apply node selector to pod %s...", pod.Name))
 	if pod.Name == "" {
 
