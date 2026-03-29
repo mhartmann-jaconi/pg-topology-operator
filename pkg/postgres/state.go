@@ -155,7 +155,8 @@ func (inst *Instance) IsSyncReplica() bool {
 	}
 	slices.Sort(activeReplicas)
 
-	for i := 0; i < inst.cluster.syncNum+1; i++ {
+	limit := min(len(activeReplicas), inst.cluster.syncNum+1)
+	for i := 0; i < limit; i++ {
 		if activeReplicas[i] == inst.instanceId {
 			return true
 		}

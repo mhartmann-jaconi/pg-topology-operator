@@ -6,6 +6,7 @@ import (
 	"log/slog"
 
 	pgapi "github.com/cloudnative-pg/cloudnative-pg/api/v1"
+	"github.com/cloudnative-pg/cloudnative-pg/pkg/postgres/replication"
 	"k8s.io/apimachinery/pkg/api/errors"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -53,6 +54,10 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 }
 
 func getStandbyInstanceCount(cluster *pgapi.Cluster) int {
+	if cluster.Spec.PostgresConfiguration.Synchronous == nil {
+		return replication.GetExpectedSyncReplicasNumber(context.Background(), cluster)
+	}
+
 	syncNum := cluster.Spec.PostgresConfiguration.Synchronous.Number
 	maxStandby := cluster.Spec.PostgresConfiguration.Synchronous.MaxStandbyNamesFromCluster
 
