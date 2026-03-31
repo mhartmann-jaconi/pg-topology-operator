@@ -8,6 +8,7 @@ import (
 
 	pgapi "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	nodes "github.com/jaconi-io/ipoque-pg-webhook/pkg/cluster"
+	"github.com/jaconi-io/ipoque-pg-webhook/pkg/config"
 	"github.com/jaconi-io/ipoque-pg-webhook/pkg/events"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -18,55 +19,51 @@ import (
 // cluster and check which instance is a sync-replica and in the desired AZ. This instance
 // is then set as desired new primary on the cluster.
 func changePrimaryInstances(newLeadingZone string) error {
+	var errx error
 	slog.Info(fmt.Sprintf("Received event for primary AZ change to %s", newLeadingZone))
 	for _, clus := range clusters {
-		if err := InitiateSwitchover(clus); err != nil {
-			slog.Error(fmt.Sprintf("Failed to change primary instance for cluster %s: %v", clus.name, err))
-			return err
+		ctx := config.EnrichContext(context.TODO(), clus.name)
+		if err := InitiateSwitchover(ctx, clus); err != nil {
+			slog.ErrorContext(ctx, fmt.Sprintf("Failed to change primary instance for cluster: %v", err))
+			errx = err
 		}
 	}
-	return nil
+	return errx
 }
 
-func InitiateSwitchover(clus *Cluster) error {
+func InitiateSwitchover(ctx context.Context, clus *Cluster) error {
 	if alreadyChanged, _ := isEligible(clus.GetPrimaryInstance(), true); alreadyChanged {
-		slog.Debug(fmt.Sprintf("Eligible target primary already set on cluster %s", clus.name))
+		slog.DebugContext(ctx, "Eligible target primary already set on cluster")
 		return nil
 	} else if clus.desiredPrimary == "" {
-		slog.Debug(fmt.Sprintf("Desired primary not yet existing for cluster %s", clus.name))
+		slog.DebugContext(ctx, "Desired primary not yet existing for cluster")
 		return nil
 	}
 
-	slog.Info(fmt.Sprintf("Changing primary instance for cluster %s. Current: %s, Desired: %s", clus.name, clus.primary, clus.desiredPrimary))
-	newInstance, err := findNewEligibleTargetInstance(clus)
+	slog.InfoContext(ctx, fmt.Sprintf("Changing primary instance for cluster. Current: %s, Desired: %s", clus.primary, clus.desiredPrimary))
+	newInstance, err := findNewEligibleTargetInstance(ctx, clus)
 	if err != nil {
 		return err
 	}
 	if newInstance == "" {
 		return fmt.Errorf("no eligible target instance found to be promoted to primary")
 	}
-	return applyNewPrimary(clus.name, clus.namespace, newInstance)
+	return applyNewPrimary(ctx, clus.name, clus.namespace, newInstance)
 }
 
 // findNewEligibleTargetInstance will return the instance-name of the instance,
 // which should currently become the primary instance.
-func findNewEligibleTargetInstance(clus *Cluster) (string, error) {
-
-	podList, err := listPodsForCluster(clus.namespace, clus.name)
-	if err != nil {
-		return "", err
-	}
-	slog.Info(fmt.Sprintf("Found %d pods overall", len(podList)))
+func findNewEligibleTargetInstance(ctx context.Context, clus *Cluster) (string, error) {
 
 	// iterate through pods (healthy instances) and decide, which one is eligible
 	// for being promoted to new primary
-	for _, pod := range podList {
-		slog.Debug(fmt.Sprintf("Checking pod %s...", pod.Name))
-		if is, reason := isEligible(clus.GetInstanceByName(pod.Name), true); is {
-			slog.Info(fmt.Sprintf("Found %s to get promoted to new primary instance", pod.Name))
-			return pod.Name, nil
+	for _, inst := range clus.GetInstances() {
+		slog.DebugContext(ctx, fmt.Sprintf("Checking instance %s...", inst.name))
+		if is, reason := isEligible(inst, true); is {
+			slog.InfoContext(ctx, fmt.Sprintf("Found %s to get promoted to new primary instance", inst.name))
+			return inst.name, nil
 		} else {
-			slog.Debug(fmt.Sprintf("Skip instance %s as it is %s", pod.Name, reason))
+			slog.DebugContext(ctx, fmt.Sprintf("Skip instance %s as it is %s", inst.name, reason))
 		}
 	}
 	return "", nil
@@ -91,8 +88,8 @@ func isEligible(inst *Instance, checkIfSync bool) (eligible bool, reason string)
 }
 
 // applyNewPrimary sets the given instance name as the new desired primary on the cluster
-func applyNewPrimary(clusterName, clusterNamespace, newPrimary string) error {
-	slog.Info(fmt.Sprintf("Change cluster to have new primary instance %s", newPrimary))
+func applyNewPrimary(ctx context.Context, clusterName, clusterNamespace, newPrimary string) error {
+	slog.InfoContext(ctx, fmt.Sprintf("Change cluster to have new primary instance %s", newPrimary))
 
 	cluster, err := readCluster(clusterNamespace, clusterName)
 	if err != nil {

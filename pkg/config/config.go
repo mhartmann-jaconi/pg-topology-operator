@@ -2,17 +2,11 @@
 package config
 
 import (
-	"fmt"
-	"log/slog"
-	"os"
 	"strings"
 
-	"github.com/go-logr/logr"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
-
-	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 const (
@@ -71,28 +65,6 @@ func initConfig() {
 	}
 	replacer := strings.NewReplacer("-", "_", ".", "_")
 	viper.SetEnvKeyReplacer(replacer)
-}
-
-func InitLogging() {
-	var level slog.Level
-	err := level.UnmarshalText([]byte(viper.GetString(LogLevel)))
-	if err != nil {
-		panic(fmt.Errorf("invalid log level %q: %w", viper.GetString(LogLevel), err))
-	}
-
-	options := &slog.HandlerOptions{
-		Level: level,
-	}
-
-	var handler slog.Handler
-	if viper.GetBool(LogJson) {
-		handler = slog.NewJSONHandler(os.Stdout, options)
-	} else {
-		handler = slog.NewTextHandler(os.Stdout, options)
-	}
-
-	slog.SetDefault(slog.New(handler))
-	log.SetLogger(logr.FromSlogHandler(handler))
 }
 
 func init() {

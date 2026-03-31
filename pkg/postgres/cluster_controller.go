@@ -7,6 +7,7 @@ import (
 
 	pgapi "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	"github.com/cloudnative-pg/cloudnative-pg/pkg/postgres/replication"
+	"github.com/jaconi-io/ipoque-pg-webhook/pkg/config"
 	"k8s.io/apimachinery/pkg/api/errors"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -33,7 +34,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 			dropCluster(cluster.Namespace, cluster.Name)
 			return reconcile.Result{}, nil
 		}
-		slog.Error(fmt.Sprintf("Failed to read cluster: %v", err))
+		ctx = config.EnrichContext(ctx, request.Name)
+		slog.ErrorContext(ctx, fmt.Sprintf("Failed to read cluster: %v", err))
 		return reconcile.Result{}, err
 	}
 

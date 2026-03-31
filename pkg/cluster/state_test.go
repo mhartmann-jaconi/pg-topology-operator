@@ -16,18 +16,18 @@ func TestStore(t *testing.T) {
 	eventCounter := 0
 	events.AddListenerForRegionChange(func(ctx context.Context, s string) { eventCounter = eventCounter + 1 })
 
-	Store("node1", "east", false)
-	Store("node2", "west", false)
+	Store("node1", "dc-01", false)
+	Store("node2", "dc-02", false)
 	g.Expect(eventCounter).To(Equal(0))
 
 	g.Expect(GetPrimaryRegion()).To(BeEmpty())
 
-	Store("node1", "east", true)
-	g.Expect(GetPrimaryRegion()).To(Equal("east"))
+	Store("node1", "dc-01", true)
+	g.Expect(GetPrimaryRegion()).To(Equal("dc-01"))
 	g.Expect(eventCounter).To(Equal(1))
 
-	Store("node2", "west", true)
-	g.Expect(GetPrimaryRegion()).To(Equal("west"))
+	Store("node2", "dc-02", true)
+	g.Expect(GetPrimaryRegion()).To(Equal("dc-02"))
 	g.Expect(eventCounter).To(Equal(2))
 }
 
@@ -37,14 +37,14 @@ func TestGetPrimaryRegion(t *testing.T) {
 
 	events.AddListenerForRegionChange(func(ctx context.Context, s string) {})
 
-	Store("node1", "east", false)
-	Store("node2", "west", false)
+	Store("node1", "dc-01", false)
+	Store("node2", "dc-02", false)
 
 	g.Expect(GetPrimaryRegion()).To(BeEmpty())
 
-	// make east the primary region
-	Store("node2", "west", true)
-	g.Expect(GetPrimaryRegion()).To(Equal("west"))
+	// make dc-02 the primary region
+	Store("node2", "dc-02", true)
+	g.Expect(GetPrimaryRegion()).To(Equal("dc-02"))
 }
 
 func cleanup() {

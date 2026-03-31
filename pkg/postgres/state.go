@@ -1,6 +1,7 @@
 package postgres
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"maps"
@@ -8,6 +9,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/jaconi-io/ipoque-pg-webhook/pkg/config"
 )
 
 // just use a high number here, which is bigger than the max amount of
@@ -24,6 +27,7 @@ type Cluster struct {
 }
 
 type Instance struct {
+	name       string
 	instanceId string
 	region     string
 	active     bool
@@ -60,6 +64,10 @@ func RegisterOrUpdateCluster(clusterNamespace, clusterName, primaryInstanceId, d
 }
 
 func dropCluster(clusterNamespace, clusterName string) {
+	if _, ok := clusters[clusterKey(clusterNamespace, clusterName)]; !ok {
+		ctx := config.EnrichContext(context.TODO(), clusterName)
+		slog.InfoContext(ctx, "Remove cluster from internal state")
+	}
 	delete(clusters, clusterKey(clusterNamespace, clusterName))
 }
 
@@ -102,16 +110,20 @@ func (clus *Cluster) GetPrimaryInstance() *Instance {
 }
 
 func (clus *Cluster) RegisterOrUpdateInstance(instanceId, region string, isHealthy bool) *Instance {
+	ctx := config.EnrichContext(context.TODO(), clus.name)
 	if _, err := strconv.Atoi(instanceId); err != nil {
-		slog.Error(fmt.Sprintf("Instance could not be created, ID %s is not a number: %v", instanceId, err))
+		slog.ErrorContext(ctx, fmt.Sprintf("Instance could not be created, ID %s is not a number: %v", instanceId, err))
 		return nil
 	}
 	if inst, ok := clus.instances[instanceId]; ok {
 		inst.active = isHealthy
 		inst.region = region
 		return inst
+	} else {
+		slog.InfoContext(ctx, fmt.Sprintf("Register new instance %s", instanceId))
 	}
 	inst := &Instance{
+		name:       clus.name + "-" + instanceId,
 		instanceId: instanceId,
 		region:     region,
 		active:     isHealthy,
@@ -138,7 +150,8 @@ func (inst *Instance) IsActive() bool {
 
 func (inst *Instance) MarkInactive() {
 	if inst.active {
-		slog.Info(fmt.Sprintf("Marking instance %s as not active", inst.instanceId))
+		ctx := config.EnrichContext(context.TODO(), inst.cluster.name)
+		slog.InfoContext(ctx, fmt.Sprintf("Marking instance %s as not active", inst.instanceId))
 	}
 	inst.active = false
 }

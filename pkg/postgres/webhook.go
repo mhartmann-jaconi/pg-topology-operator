@@ -6,6 +6,7 @@ import (
 	"log/slog"
 
 	pgapi "github.com/cloudnative-pg/cloudnative-pg/api/v1"
+	"github.com/jaconi-io/ipoque-pg-webhook/pkg/config"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
@@ -24,44 +25,45 @@ func Setup(mgr ctrl.Manager) error {
 type defaulter struct {
 }
 
-func (defaulter) Default(_ context.Context, obj runtime.Object) error {
+func (defaulter) Default(ctx context.Context, obj runtime.Object) error {
 	cluster, ok := obj.(*pgapi.Cluster)
 	if !ok {
 		slog.Warn(fmt.Sprintf("Invalid object type: %s", obj.GetObjectKind().GroupVersionKind().Kind))
 		return nil
 	}
+	ctx = config.EnrichContext(ctx, cluster.Name)
 	currentPrimary := cluster.Status.CurrentPrimary
 	desiredPrimary := cluster.Status.TargetPrimary
 	if currentPrimary == "" {
-		slog.Debug(fmt.Sprintf("Current primary not set yet for cluster %s", cluster.Name))
+		slog.DebugContext(ctx, "Current primary not set yet for cluster")
 		return nil
 	}
 	if currentPrimary == desiredPrimary {
-		slog.Debug(fmt.Sprintf("Current primary is already target primary on cluster %s", cluster.Name))
+		slog.DebugContext(ctx, "Current primary is already target primary on cluster")
 		return nil
 	}
 	clus := GetCluster(cluster.Namespace, cluster.Name)
 	if clus == nil {
-		slog.Debug(fmt.Sprintf("Cluster %s not registered yet", cluster.Name))
+		slog.DebugContext(ctx, "Cluster is not registered yet")
 		return nil
 	}
 	inst := clus.GetInstanceByName(desiredPrimary)
 	if inst == nil {
-		slog.Error(fmt.Sprintf("Instance %s not registered for cluster %s", desiredPrimary, clus.name))
+		slog.ErrorContext(ctx, fmt.Sprintf("Instance %s not registered for cluster", desiredPrimary))
 		return nil
 	}
 	if eligible, reason := isEligible(inst, false); eligible {
-		slog.Debug(fmt.Sprintf("Desired primary %s is already eligible cluster %s", desiredPrimary, cluster.Name))
+		slog.DebugContext(ctx, fmt.Sprintf("Desired primary %s is already eligible cluster", desiredPrimary))
 		return nil
 	} else {
-		slog.Info(fmt.Sprintf("Intercept primary election from %s: %s", desiredPrimary, reason))
+		slog.InfoContext(ctx, fmt.Sprintf("Intercept primary election from %s: %s", desiredPrimary, reason))
 	}
-	newPrimary, err := findNewEligibleTargetInstance(clus)
+	newPrimary, err := findNewEligibleTargetInstance(ctx, clus)
 	if err != nil {
-		slog.Error(fmt.Sprintf("Failed to find new target instance for cluster %s: %v", clus.name, err))
+		slog.ErrorContext(ctx, fmt.Sprintf("Failed to find new target instance for cluster: %v", err))
 		return nil
 	}
-	slog.Info(fmt.Sprintf("Update cluster desired primary to %s", newPrimary))
+	slog.InfoContext(ctx, fmt.Sprintf("Update cluster desired primary to %s", newPrimary))
 	cluster.Status.TargetPrimary = newPrimary
 	return nil
 }

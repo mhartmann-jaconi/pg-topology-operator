@@ -25,10 +25,10 @@ func TestReconcile(t *testing.T) {
 	viper.Set(config.LabelRegion, "region")
 	defer cleanup()
 
-	node1 := createNode("node1", "east", true, true)
-	node2 := createNode("node2", "east", true, true)
-	node3 := createNode("node3", "west", true, false)
-	node4 := createNode("node4", "west", true, false)
+	node1 := createNode("node1", "dc-01", true, true)
+	node2 := createNode("node2", "dc-01", true, true)
+	node3 := createNode("node3", "dc-02", true, false)
+	node4 := createNode("node4", "dc-02", true, false)
 
 	_, err := runReconcile(node1)
 	g.Expect(err).To(BeNil())
@@ -39,8 +39,8 @@ func TestReconcile(t *testing.T) {
 	_, err = runReconcile(node4)
 	g.Expect(err).To(BeNil())
 
-	// reconcile all nodes and check that east is primary and all other mappings exist
-	g.Expect(GetPrimaryRegion()).To(Equal("east"))
+	// reconcile all nodes and check that dc-01 is primary and all other mappings exist
+	g.Expect(GetPrimaryRegion()).To(Equal("dc-01"))
 	g.Expect(primaryChangeCount).To(Equal(1))
 
 	// make node3 unhealthy and try to reconcile -> no change
@@ -48,14 +48,14 @@ func TestReconcile(t *testing.T) {
 	node3.ObjectMeta.Labels["lead"] = "yep"
 	_, err = runReconcile(node3)
 	g.Expect(err).To(BeNil())
-	g.Expect(GetPrimaryRegion()).To(Equal("east"))
+	g.Expect(GetPrimaryRegion()).To(Equal("dc-01"))
 	g.Expect(primaryChangeCount).To(Equal(1))
 
 	node4.ObjectMeta.Labels["lead"] = "yep"
 	_, err = runReconcile(node4)
 
 	// check that primary region changed
-	g.Expect(GetPrimaryRegion()).To(Equal("west"))
+	g.Expect(GetPrimaryRegion()).To(Equal("dc-02"))
 	g.Expect(primaryChangeCount).To(Equal(2))
 }
 

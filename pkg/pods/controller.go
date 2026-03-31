@@ -6,6 +6,7 @@ import (
 	"log/slog"
 
 	"github.com/jaconi-io/ipoque-pg-webhook/pkg/cluster"
+	"github.com/jaconi-io/ipoque-pg-webhook/pkg/config"
 	postgres "github.com/jaconi-io/ipoque-pg-webhook/pkg/postgres"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -44,11 +45,12 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 
 	clusterName := postgres.GetClusterName(pod.Labels)
 	instanceId := postgres.GetInstanceId(pod.Labels)
+	ctx = config.EnrichContext(ctx, clusterName)
 
 	clus := postgres.GetCluster(pod.Namespace, clusterName)
 	if clus == nil {
 		// cluster not existing in internal state
-		slog.Warn(fmt.Sprintf("Cluster %s not existing, skip processing of %s", clusterName, pod.Name))
+		slog.WarnContext(ctx, fmt.Sprintf("Cluster is not existing, skip processing of %s", pod.Name))
 		return reconcile.Result{}, nil
 	}
 
