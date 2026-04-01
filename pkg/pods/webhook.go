@@ -33,7 +33,8 @@ type defaulter struct {
 func (defaulter) Default(ctx context.Context, obj runtime.Object) error {
 	pod, ok := obj.(*corev1.Pod)
 	if !ok {
-		slog.Warn(fmt.Sprintf("Invalid object type: %s", obj.GetObjectKind().GroupVersionKind().Kind))
+		err := fmt.Errorf("Object not of type pod: %s", obj.GetObjectKind().GroupVersionKind().Kind)
+		slog.Warn("Failed to call pod webhook", "err", err)
 		return nil
 	}
 	slog.Debug(fmt.Sprintf("Check if we can apply node selector to pod %s...", pod.Name))
@@ -45,7 +46,7 @@ func (defaulter) Default(ctx context.Context, obj runtime.Object) error {
 	clusterName := postgres.GetClusterName(pod.Labels)
 	ctx = config.EnrichContext(ctx, clusterName)
 	if err := applyNodeSelector(ctx, pod); err != nil {
-		slog.ErrorContext(ctx, fmt.Sprintf("failed to mutate pod: %v", err))
+		slog.ErrorContext(ctx, "failed to mutate pod", "err", err)
 		return err
 	}
 	return nil
@@ -57,7 +58,6 @@ func applyNodeSelector(ctx context.Context, pod *corev1.Pod) error {
 	clusterName := postgres.GetClusterName(pod.Labels)
 	clus := postgres.GetCluster(pod.Namespace, clusterName)
 	if clus == nil {
-		slog.WarnContext(ctx, fmt.Sprintf("Cluster is not existing yet, skip instance %s", pod.Name))
 		return fmt.Errorf("cluster %s not found", clusterName)
 	}
 	if clus.GetCurrentPrimaryInstanceId() != "" {

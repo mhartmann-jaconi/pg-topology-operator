@@ -40,6 +40,7 @@ func InitLogging() {
 		Level: level,
 	}
 
+	// create default handler: either standard text or json, if required
 	var handler slog.Handler
 	if viper.GetBool(LogJson) {
 		handler = slog.NewJSONHandler(os.Stdout, options)
@@ -47,8 +48,11 @@ func InitLogging() {
 		handler = slog.NewTextHandler(os.Stdout, options)
 	}
 
+	// wrap default handler with context value enrichment
 	ctxHandler := ContextHandler{Handler: handler}
 
+	// set default log config
 	slog.SetDefault(slog.New(ctxHandler))
+	// adjust controller-runtime log settings with our own config
 	log.SetLogger(logr.FromSlogHandler(ctxHandler))
 }

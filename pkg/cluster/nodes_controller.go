@@ -24,17 +24,17 @@ var _ reconcile.Reconciler = &Reconciler{}
 // Reconcile will store information about existing zones, regions and which
 // zone is the primary one, based on node labels
 func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
-	slog.Debug(fmt.Sprintf("Reconciling node %s...", request.Name))
 	var node = &v1.Node{}
 	if err := r.Client.Get(ctx, request.NamespacedName, node); err != nil {
 		if errors.IsNotFound(err) {
 			return reconcile.Result{}, nil
 		}
-		slog.Error(fmt.Sprintf("failed to read node: %v", err))
+		slog.Error(fmt.Sprintf("failed to read node: %s", request.Name), "err", err)
 		return reconcile.Result{}, err
 	}
 
 	if !isHealthy(node) {
+		// ignore
 		return reconcile.Result{}, nil
 	}
 

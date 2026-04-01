@@ -28,7 +28,8 @@ type defaulter struct {
 func (defaulter) Default(ctx context.Context, obj runtime.Object) error {
 	cluster, ok := obj.(*pgapi.Cluster)
 	if !ok {
-		slog.Warn(fmt.Sprintf("Invalid object type: %s", obj.GetObjectKind().GroupVersionKind().Kind))
+		err := fmt.Errorf("Object not of type cluster: %s", obj.GetObjectKind().GroupVersionKind().Kind)
+		slog.Warn("Failed to call cluster webhook", "err", err)
 		return nil
 	}
 	ctx = config.EnrichContext(ctx, cluster.Name)
@@ -56,11 +57,11 @@ func (defaulter) Default(ctx context.Context, obj runtime.Object) error {
 		slog.DebugContext(ctx, fmt.Sprintf("Desired primary %s is already eligible cluster", desiredPrimary))
 		return nil
 	} else {
-		slog.InfoContext(ctx, fmt.Sprintf("Intercept primary election from %s: %s", desiredPrimary, reason))
+		slog.InfoContext(ctx, fmt.Sprintf("Intercept primary election to not use %s: %s", desiredPrimary, reason))
 	}
 	newPrimary, err := findNewEligibleTargetInstance(ctx, clus)
 	if err != nil {
-		slog.ErrorContext(ctx, fmt.Sprintf("Failed to find new target instance for cluster: %v", err))
+		slog.ErrorContext(ctx, "Failed to find new target instance for cluster", "err", err)
 		return nil
 	}
 	slog.InfoContext(ctx, fmt.Sprintf("Update cluster desired primary to %s", newPrimary))

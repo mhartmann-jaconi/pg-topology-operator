@@ -1,6 +1,11 @@
-# ipoque-pg-webhook
+# pg-topology-operator
 
-This webhook is responsible for assigning a [region](https://kubernetes.io/docs/reference/labels-annotations-taints/#topologykubernetesiozone)-based [`nodeSelector`](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#nodeselector) to PG primary Pod, created by [cloudnative-pg](https://cloudnative-pg.io/). In addition, this will also make sure that the primary Postgres instance is always running in the primary region.
+An Operator which makes sure, that the primary CNPG-Potgres instance is always running in the primary region in K8s. This happens in different scenarios:
+1. A switchover -> a new region is designated as the new primary region: Operator will promote a sync-replica in the new primary region to the new primary instance
+2. Initial Setup -> the first postgres instance is always the primary: Operator will add a [region](https://kubernetes.io/docs/reference/labels-annotations-taints/#topologykubernetesioregion)-based [`nodeSelector`](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#nodeselector) to the primary postgres Pod, pointing to the primary region
+3. Instance Failover -> the current primary instance gets unhealty: CNPG will decide to promote another postgres instance to primary; Operator intercepts that and makes sure that the new primary instance is running in the primary region
+
+To promote a dedicated instance to new primary, the operator changes the field `status.targetPrimary` on the postgres cluster K8s resource (which is basically, what CNPG [also does](https://github.com/cloudnative-pg/cloudnative-pg/blob/main/internal/cmd/plugin/promote/promote.go)).
 
 ## Responsibilities
 
@@ -14,7 +19,7 @@ The **pod controller** watches for K8s pods, belonging to PG clusters, and store
 
 ### Webhooks
 
-The **pod webhook** intercepts K8s pod creation and applies a node selector to primary instances, based on the region, which will point to the current primary region.
+The **pod webhook** intercepts K8s pod creation and applies a node selector to first instance, based on the region, which will point to the current primary region.
 
 The **cluster webhook** intercepts PG cluster status changes and checks if it needs to change the selected target primary instance.
 
@@ -29,8 +34,8 @@ helm install pg-topology helm -n cnpg-system
 ### docker
 
 ```
-docker build . -f Dockerfile -t docker.lp.rsint.net/platform/pg-topology-operator:v0.9.2
-docker push docker.lp.rsint.net/platform/pg-topology-operator:v0.9.2
+docker build . -f Dockerfile -t docker.lp.rsint.net/platform/pg-topology-operator:v0.9.3
+docker push docker.lp.rsint.net/platform/pg-topology-operator:v0.9.3
 ```
 
 ### helm
@@ -68,6 +73,16 @@ instance to the sync-replica, which is running in primary zone.
 The webhook must make sure that the new primary instance is at least in the same region as the primary zone and it must
 watch for the cluster to become healthy again. As soon as this is the case, it must switch back the primary instance
 again to the one in the primary zone.
+
+## Implementation
+
+### Logging
+
+For logging, we use golangs [slog](https://go.dev/blog/slog) package. Exposed fields are:
+* level - log level (DEBUG, INFO, WARN, ERROR or FATAL)
+* msg - the actual log message
+* cluster - (optional) name of the Postgres cluster
+* err - (optional) underlying error message in error logs
 
 ## TODO
 

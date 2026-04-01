@@ -35,7 +35,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 			return reconcile.Result{}, nil
 		}
 		ctx = config.EnrichContext(ctx, request.Name)
-		slog.ErrorContext(ctx, fmt.Sprintf("Failed to read cluster: %v", err))
+		slog.ErrorContext(ctx, fmt.Sprintf("Failed to read cluster %s", request.Name), "err", err)
 		return reconcile.Result{}, err
 	}
 

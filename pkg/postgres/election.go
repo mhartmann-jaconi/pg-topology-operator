@@ -23,15 +23,15 @@ func changePrimaryInstances(newLeadingZone string) error {
 	slog.Info(fmt.Sprintf("Received event for primary AZ change to %s", newLeadingZone))
 	for _, clus := range clusters {
 		ctx := config.EnrichContext(context.TODO(), clus.name)
-		if err := InitiateSwitchover(ctx, clus); err != nil {
-			slog.ErrorContext(ctx, fmt.Sprintf("Failed to change primary instance for cluster: %v", err))
+		if err := initiateSwitchover(ctx, clus); err != nil {
+			slog.ErrorContext(ctx, "Failed to change primary instance for cluster", "err", err)
 			errx = err
 		}
 	}
 	return errx
 }
 
-func InitiateSwitchover(ctx context.Context, clus *Cluster) error {
+func initiateSwitchover(ctx context.Context, clus *Cluster) error {
 	if alreadyChanged, _ := isEligible(clus.GetPrimaryInstance(), true); alreadyChanged {
 		slog.DebugContext(ctx, "Eligible target primary already set on cluster")
 		return nil

@@ -31,7 +31,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 			// deleted
 			return reconcile.Result{}, nil
 		}
-		slog.Error(fmt.Sprintf("failed to read pod: %v", err))
+		slog.Error(fmt.Sprintf("failed to read pod: %s", request.Name), "err", err)
 		return reconcile.Result{}, err
 	}
 	if _, ok := pod.Labels[postgres.LabelPGInstanceName]; !ok {

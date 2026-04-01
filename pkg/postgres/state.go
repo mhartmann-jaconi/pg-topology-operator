@@ -112,7 +112,7 @@ func (clus *Cluster) GetPrimaryInstance() *Instance {
 func (clus *Cluster) RegisterOrUpdateInstance(instanceId, region string, isHealthy bool) *Instance {
 	ctx := config.EnrichContext(context.TODO(), clus.name)
 	if _, err := strconv.Atoi(instanceId); err != nil {
-		slog.ErrorContext(ctx, fmt.Sprintf("Instance could not be created, ID %s is not a number: %v", instanceId, err))
+		slog.ErrorContext(ctx, fmt.Sprintf("Instance could not be created, ID %s is not a number", instanceId), "err", err)
 		return nil
 	}
 	if inst, ok := clus.instances[instanceId]; ok {
