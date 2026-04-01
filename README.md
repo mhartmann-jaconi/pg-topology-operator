@@ -41,9 +41,9 @@ docker push docker.lp.rsint.net/platform/pg-topology-operator:v0.9.3
 ### helm
 
 ```
-helm package helm
-chart="$(ls -t1 pg*.tgz | head -n1)"
-curl -k -u yourAD:yourPW -XPUT "https://helm.lp.rsint.net/helm-dev/rs/coc/platform/$chart" -T $chart
+export AD_USER=...
+export AD_PASSWORD=...
+make helm-upload
 ```
 
 ## cloudnative-pg behaviour

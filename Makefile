@@ -1,11 +1,9 @@
 # Image URL to use all building/pushing image targets
-DOCKER_TAG                      ?= latest
-BUILD_DIR                        = build
-DOCKER_SERVICE_IMAGE_PATH       ?= docker.lp.rsint.net/platform
-DOCKER_SERVICE_IMAGE_NAME        = ${DOCKER_SERVICE_IMAGE_PATH}/pg-topology-operator
-DOCKER_IMAGE ?= ${DOCKER_SERVICE_IMAGE_NAME}:${DOCKER_TAG}
-HELM_REPO_PATH ?= https://helm.lp.rsint.net/helm-dev/rs/coc/platform
-HELM_CHART_DIR = ${BUILD_DIR}
+DOCKER_TAG                ?= latest
+DOCKER_SERVICE_IMAGE_PATH ?= docker.lp.rsint.net/platform
+DOCKER_SERVICE_IMAGE_NAME  = ${DOCKER_SERVICE_IMAGE_PATH}/pg-topology-operator
+DOCKER_IMAGE              ?= ${DOCKER_SERVICE_IMAGE_NAME}:${DOCKER_TAG}
+HELM_REPO_PATH            ?= https://helm.lp.rsint.net/helm-dev/rs/coc/platform
 
 all: test
 
@@ -40,7 +38,7 @@ mod:
 
 .PHONY: docker-build
 docker-build:
-	docker build -t ${DOCKER_IMAGE} .
+	docker build -f Dockerfile -t ${DOCKER_IMAGE} .
 
 .PHONY: docker-upload
 docker-upload: docker-build
@@ -48,12 +46,13 @@ docker-upload: docker-build
 
 .PHONY: helm-package
 helm-package:
-	helm package helm -d build
+	helm package helm
 
 .PHONY: helm-upload
-helm-upload: ${HELM_CHART_DIR}/*.tgz  # requires helm-package
-	@$(foreach path, $^, curl -k -u ${HELM_REPOSITORY_USERNAME}:${HELM_REPOSITORY_PASSWORD} --fail -XPUT "${HELM_REPO_PATH}/$(notdir ${path})" --upload-file ${path} &&) \
-		echo "\n\nHelm charts uploaded."
+helm-upload: helm-package
+	chart=$$(ls -t1 pg*.tgz | head -n1); \
+	echo "uploading chart $$chart..."; \
+	curl -k -u ${AD_USER}:${AD_PASSWORD} -XPUT "${HELM_REPO_PATH}/$$chart" -T $$chart
 
 #
 # - - - - - - - - - - K8s Testing - - - - - - - - - -
