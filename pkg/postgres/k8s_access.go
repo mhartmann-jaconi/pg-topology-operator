@@ -5,7 +5,6 @@ import (
 	"time"
 
 	pgapi "github.com/cloudnative-pg/cloudnative-pg/api/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/util/retry"
@@ -26,7 +25,7 @@ func patchObject(origin, updated client.Object) error {
 		return getClient().Status().Patch(
 			context.TODO(),
 			updated,
-			client.MergeFromWithOptions(origin, client.MergeFromWithOptimisticLock{}),
+			client.MergeFromWithOptions(origin),
 		)
 	})
 }
@@ -40,7 +39,7 @@ func retryOnConflict(function func() error) error {
 			Jitter:   0.0,
 		},
 		func(err error) bool {
-			return errors.IsConflict(err)
+			return true
 		},
 		function,
 	)
