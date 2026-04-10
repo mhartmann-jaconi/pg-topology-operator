@@ -115,9 +115,9 @@ func applyNewPrimary(ctx context.Context, clusterName, clusterNamespace, newPrim
 			}
 			mcluster := setNewTarget(cluster.DeepCopy(), newPrimary)
 			return getClient().Status().Patch(
-				context.TODO(),
-				cluster,
-				client.MergeFromWithOptions(mcluster),
+				ctx,
+				mcluster,
+				client.MergeFrom(cluster),
 			)
 		},
 	)
