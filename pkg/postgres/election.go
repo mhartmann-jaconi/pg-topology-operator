@@ -12,6 +12,9 @@ import (
 	"github.com/jaconi-io/ipoque-pg-webhook/pkg/events"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/client-go/util/retry"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // changePrimaryInstances will change the desired primary instance for all PG clusters
@@ -91,18 +94,33 @@ func isEligible(inst *Instance, checkIfSync bool) (eligible bool, reason string)
 func applyNewPrimary(ctx context.Context, clusterName, clusterNamespace, newPrimary string) error {
 	slog.InfoContext(ctx, fmt.Sprintf("Change cluster to have new primary instance %s", newPrimary))
 
-	cluster, err := readCluster(clusterNamespace, clusterName)
-	if err != nil {
-		return err
-	}
-	if cluster.Status.TargetPrimary == newPrimary {
-		// already set, nothing to do here
-		return nil
-	}
-
-	mcluster := setNewTarget(cluster.DeepCopy(), newPrimary)
-
-	return patchObject(cluster, mcluster)
+	return retry.OnError(
+		wait.Backoff{
+			Duration: 1 * time.Second,
+			Factor:   1.0,
+			Steps:    10,
+			Jitter:   0.0,
+		},
+		func(err error) bool {
+			return true
+		},
+		func() error {
+			cluster, err := readCluster(clusterNamespace, clusterName)
+			if err != nil {
+				return err
+			}
+			if cluster.Status.TargetPrimary == newPrimary {
+				// already set, nothing to do here
+				return nil
+			}
+			mcluster := setNewTarget(cluster.DeepCopy(), newPrimary)
+			return getClient().Status().Patch(
+				context.TODO(),
+				cluster,
+				client.MergeFromWithOptions(mcluster),
+			)
+		},
+	)
 }
 
 func setNewTarget(clus *pgapi.Cluster, newTarget string) *pgapi.Cluster {
