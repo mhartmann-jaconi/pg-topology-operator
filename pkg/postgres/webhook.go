@@ -54,14 +54,14 @@ func (defaulter) Default(ctx context.Context, obj runtime.Object) error {
 		return nil
 	}
 	if eligible, reason := isEligible(inst, false); eligible {
-		slog.DebugContext(ctx, fmt.Sprintf("Desired primary %s is already eligible cluster", desiredPrimary))
+		slog.DebugContext(ctx, fmt.Sprintf("Desired primary %s is already eligible primary", desiredPrimary))
 		return nil
 	} else {
 		slog.InfoContext(ctx, fmt.Sprintf("Intercept primary election to not use %s: %s", desiredPrimary, reason))
 	}
-	newPrimary, err := findNewEligibleTargetInstance(ctx, clus)
-	if err != nil {
-		slog.ErrorContext(ctx, "Failed to find new target instance for cluster", "err", err)
+	newPrimary := findNewEligibleTargetInstance(ctx, clus)
+	if newPrimary == "" {
+		slog.ErrorContext(ctx, "No eligible target instance found to be promoted to primary")
 		return nil
 	}
 	slog.InfoContext(ctx, fmt.Sprintf("Update cluster desired primary to %s", newPrimary))

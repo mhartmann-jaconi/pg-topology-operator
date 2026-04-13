@@ -12,9 +12,6 @@ import (
 	"github.com/jaconi-io/ipoque-pg-webhook/pkg/events"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/wait"
-	"k8s.io/client-go/util/retry"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // changePrimaryInstances will change the desired primary instance for all PG clusters
@@ -34,6 +31,11 @@ func changePrimaryInstances(newLeadingZone string) error {
 	return errx
 }
 
+// initiateSwitchover will set a new desired primary instance on the cluster in K8s,
+// if necessary. It will first check if the actual desired instance is already
+// eligible to become the new primary. If not, this will try to find another instance
+// to get promoted and set this as desired primary.
+// If no instance could be found, this will return an error.
 func initiateSwitchover(ctx context.Context, clus *Cluster) error {
 	if alreadyChanged, _ := isEligible(clus.GetPrimaryInstance(), true); alreadyChanged {
 		slog.DebugContext(ctx, "Eligible target primary already set on cluster")
@@ -44,10 +46,7 @@ func initiateSwitchover(ctx context.Context, clus *Cluster) error {
 	}
 
 	slog.InfoContext(ctx, fmt.Sprintf("Changing primary instance for cluster. Current: %s, Desired: %s", clus.primary, clus.desiredPrimary))
-	newInstance, err := findNewEligibleTargetInstance(ctx, clus)
-	if err != nil {
-		return err
-	}
+	newInstance := findNewEligibleTargetInstance(ctx, clus)
 	if newInstance == "" {
 		return fmt.Errorf("no eligible target instance found to be promoted to primary")
 	}
@@ -56,7 +55,8 @@ func initiateSwitchover(ctx context.Context, clus *Cluster) error {
 
 // findNewEligibleTargetInstance will return the instance-name of the instance,
 // which should currently become the primary instance.
-func findNewEligibleTargetInstance(ctx context.Context, clus *Cluster) (string, error) {
+// If no such instance could be found, an empty string is retrieved.
+func findNewEligibleTargetInstance(ctx context.Context, clus *Cluster) string {
 
 	// iterate through pods (healthy instances) and decide, which one is eligible
 	// for being promoted to new primary
@@ -64,14 +64,17 @@ func findNewEligibleTargetInstance(ctx context.Context, clus *Cluster) (string, 
 		slog.DebugContext(ctx, fmt.Sprintf("Checking instance %s...", inst.name))
 		if is, reason := isEligible(inst, true); is {
 			slog.InfoContext(ctx, fmt.Sprintf("Found %s to get promoted to new primary instance", inst.name))
-			return inst.name, nil
+			return inst.name
 		} else {
 			slog.DebugContext(ctx, fmt.Sprintf("Skip instance %s as it is %s", inst.name, reason))
 		}
 	}
-	return "", nil
+	return ""
 }
 
+// isEligible tells if the given instance is eligible to become the new primary instance.
+// The checkIfSync parameter determines if the instance needs to be a sync replica or not.
+// If the instance is not eligible, this will also return a reason string, why it isn't.
 func isEligible(inst *Instance, checkIfSync bool) (eligible bool, reason string) {
 	if inst == nil {
 		return false, "not existing"
@@ -94,33 +97,14 @@ func isEligible(inst *Instance, checkIfSync bool) (eligible bool, reason string)
 func applyNewPrimary(ctx context.Context, clusterName, clusterNamespace, newPrimary string) error {
 	slog.InfoContext(ctx, fmt.Sprintf("Change cluster to have new primary instance %s", newPrimary))
 
-	return retry.OnError(
-		wait.Backoff{
-			Duration: 1 * time.Second,
-			Factor:   1.0,
-			Steps:    10,
-			Jitter:   0.0,
-		},
-		func(err error) bool {
-			return true
-		},
-		func() error {
-			cluster, err := readCluster(clusterNamespace, clusterName)
-			if err != nil {
-				return err
-			}
-			if cluster.Status.TargetPrimary == newPrimary {
-				// already set, nothing to do here
-				return nil
-			}
-			mcluster := setNewTarget(cluster.DeepCopy(), newPrimary)
-			return getClient().Status().Patch(
-				ctx,
-				mcluster,
-				client.MergeFrom(cluster),
-			)
-		},
-	)
+	return patchClusterWithRetry(clusterNamespace, clusterName, func(cluster *pgapi.Cluster) (*pgapi.Cluster, bool) {
+		if cluster.Status.TargetPrimary == newPrimary {
+			// already set, nothing to do here
+			slog.DebugContext(ctx, fmt.Sprintf("Desired primary %s already set", newPrimary))
+			return nil, false
+		}
+		return setNewTarget(cluster.DeepCopy(), newPrimary), true
+	})
 }
 
 func setNewTarget(clus *pgapi.Cluster, newTarget string) *pgapi.Cluster {
