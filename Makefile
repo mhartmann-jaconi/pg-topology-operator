@@ -1,6 +1,7 @@
 # Image URL to use all building/pushing image targets
 DOCKER_TAG                ?= latest
-DOCKER_SERVICE_IMAGE_PATH ?= docker.lp.rsint.net/platform
+DOCKER_REGISTRY           ?= docker.lp.rsint.net
+DOCKER_SERVICE_IMAGE_PATH ?= ${DOCKER_REGISTRY}/platform
 DOCKER_SERVICE_IMAGE_NAME  = ${DOCKER_SERVICE_IMAGE_PATH}/pg-topology-operator
 DOCKER_IMAGE              ?= ${DOCKER_SERVICE_IMAGE_NAME}:${DOCKER_TAG}
 HELM_REPO_PATH            ?= https://helm.lp.rsint.net/helm-dev/rs/coc/platform
@@ -42,6 +43,7 @@ docker-build:
 
 .PHONY: docker-upload
 docker-upload: docker-build
+	docker login ${DOCKER_REGISTRY} --username ${AD_USER} --password ${AD_PASSWORD}
 	docker push ${DOCKER_IMAGE}
 
 .PHONY: helm-package

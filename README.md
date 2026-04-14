@@ -37,6 +37,12 @@ helm install pg-topology helm -n cnpg-system
 docker build . -f Dockerfile -t docker.lp.rsint.net/platform/pg-topology-operator:v0.9.7
 docker push docker.lp.rsint.net/platform/pg-topology-operator:v0.9.7
 ```
+or
+```
+export AD_USER=...
+export AD_PASSWORD=...
+make DOCKER_TAG=v0.9.7 docker-upload
+```
 
 ### helm
 
