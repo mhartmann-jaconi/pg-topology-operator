@@ -8,10 +8,11 @@ import (
 
 	pgapi "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	nodes "github.com/jaconi-io/ipoque-pg-webhook/pkg/cluster"
-	"github.com/jaconi-io/ipoque-pg-webhook/pkg/config"
 	"github.com/jaconi-io/ipoque-pg-webhook/pkg/events"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/client-go/util/retry"
 )
 
 // changePrimaryInstances will change the desired primary instance for all PG clusters
@@ -19,16 +20,40 @@ import (
 // cluster and check which instance is a sync-replica and in the desired AZ. This instance
 // is then set as desired new primary on the cluster.
 func changePrimaryInstances(newLeadingZone string) error {
-	var errx error
 	slog.Info(fmt.Sprintf("Received event for primary AZ change to %s", newLeadingZone))
+	clusterLeft := make([]*Cluster, len(clusters))
+	count := 0
 	for _, clus := range clusters {
-		ctx := config.EnrichContext(context.TODO(), clus.name)
-		if err := initiateSwitchover(ctx, clus); err != nil {
-			slog.ErrorContext(ctx, "Failed to change primary instance for cluster", "err", err)
-			errx = err
-		}
+		clusterLeft[count] = clus
+		count++
 	}
-	return errx
+	return retry.OnError(
+		wait.Backoff{
+			Duration: 1 * time.Second,
+			Factor:   1.5,
+			Steps:    -1,
+			Jitter:   0.0,
+		},
+		func(err error) bool {
+			return true
+		},
+		func() error {
+			var errx error
+			clusterErrors := make([]*Cluster, 0)
+			for _, clus := range clusterLeft {
+				if err := clus.initiateSwitchover(); err != nil {
+					errx = err
+					clusterErrors = append(clusterErrors, clus)
+				}
+			}
+			if len(clusterErrors) > 0 {
+				slog.Warn(fmt.Sprintf("Errors occurred for switchover in %d clusters. Retrying...", len(clusterErrors)))
+				clusterLeft = clusterErrors
+				return errx
+			}
+			return nil
+		},
+	)
 }
 
 // initiateSwitchover will set a new desired primary instance on the cluster in K8s,

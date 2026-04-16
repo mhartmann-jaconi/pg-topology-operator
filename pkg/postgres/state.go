@@ -140,6 +140,15 @@ func (clus *Cluster) MarkInactive(instanceId string) {
 	}
 }
 
+func (clus *Cluster) initiateSwitchover() error {
+	ctx := config.EnrichContext(context.TODO(), clus.name)
+	if err := initiateSwitchover(ctx, clus); err != nil {
+		slog.ErrorContext(ctx, "Failed to change primary instance for cluster", "err", err)
+		return err
+	}
+	return nil
+}
+
 func (inst *Instance) GetRegion() string {
 	return inst.region
 }

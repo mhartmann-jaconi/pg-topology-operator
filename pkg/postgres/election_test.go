@@ -1,14 +1,15 @@
 package postgres
 
 import (
+	"context"
 	"testing"
 
 	pgapi "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	"github.com/jaconi-io/ipoque-pg-webhook/pkg/cluster"
 	"github.com/jaconi-io/ipoque-pg-webhook/pkg/config"
+	"github.com/jaconi-io/ipoque-pg-webhook/pkg/events"
 	. "github.com/onsi/gomega"
 	"github.com/spf13/viper"
-	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -25,6 +26,70 @@ func Test_changePrimaryInstances(t *testing.T) {
 
 	viper.Set(config.LogLevel, "debug")
 	config.InitLogging()
+
+	cluster.Store("node1", "dc-01", false)
+	cluster.Store("node2", "dc-02", true)
+
+	clus1 := &Cluster{
+		name:           clusterName,
+		namespace:      clusterNamespace,
+		syncNum:        2,
+		primary:        "1",
+		desiredPrimary: "1",
+		instances:      map[string]*Instance{},
+	}
+	clusterName2 := clusterName + "2"
+	clus2 := &Cluster{
+		name:           clusterName2,
+		namespace:      clusterNamespace,
+		syncNum:        2,
+		primary:        "1",
+		desiredPrimary: "1",
+		instances:      map[string]*Instance{},
+	}
+
+	clusters = map[string]*Cluster{
+		clusterKey(clusterNamespace, clusterName):  clus1,
+		clusterKey(clusterNamespace, clusterName2): clus2,
+	}
+
+	clus1.RegisterOrUpdateInstance("1", "dc-01", true)
+	clus1.RegisterOrUpdateInstance("2", "dc-02", true)
+	clus2.RegisterOrUpdateInstance("1", "dc-01", true)
+	clus2.RegisterOrUpdateInstance("2", "dc-02", true)
+
+	apiCluster1 := &pgapi.Cluster{
+		ObjectMeta: v1.ObjectMeta{
+			Name:      clusterName,
+			Namespace: clusterNamespace,
+		},
+		Status: pgapi.ClusterStatus{},
+	}
+	apiCluster2 := &pgapi.Cluster{
+		ObjectMeta: v1.ObjectMeta{
+			Name:      clusterName2,
+			Namespace: clusterNamespace,
+		},
+		Status: pgapi.ClusterStatus{},
+	}
+	scheme, _ := pgapi.SchemeBuilder.Build()
+	cli = fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithStatusSubresource(apiCluster1, apiCluster2).
+		WithObjects(apiCluster1, apiCluster2).Build()
+
+	err := changePrimaryInstances("dc-02")
+	g.Expect(err).To(BeNil())
+}
+
+func Test_initiateSwitchover(t *testing.T) {
+	g := NewWithT(t)
+
+	defer viper.Reset()
+
+	viper.Set(config.LogLevel, "debug")
+	config.InitLogging()
+	events.SetListenersForRegionChange(func(ctx context.Context, s string) {})
 
 	cluster.Store("node1", "dc-01", false)
 	cluster.Store("node2", "dc-02", true)
@@ -77,7 +142,9 @@ func Test_changePrimaryInstances(t *testing.T) {
 		WithStatusSubresource(apiCluster1, apiCluster2).
 		WithObjects(apiCluster1, apiCluster2).Build()
 
-	err := changePrimaryInstances("dc-02")
+	err := clus2.initiateSwitchover()
+	g.Expect(err).To(BeNil())
+	err = clus1.initiateSwitchover()
 	g.Expect(err).NotTo(BeNil())
 	g.Expect(err.Error()).To(ContainSubstring("no eligible target instance found to be promoted to primary"))
 }
@@ -143,33 +210,4 @@ func setup() {
 		syncNum:   2,
 		instances: map[string]*Instance{},
 	}
-}
-
-func createPod(idx, region string, primary bool) *corev1.Pod {
-	pd := &corev1.Pod{
-		ObjectMeta: v1.ObjectMeta{
-			Name:      clusterName + "-" + idx,
-			Namespace: clusterNamespace,
-			Labels: map[string]string{
-				LabelPGClusterName:  clusterName,
-				LabelPGInstanceRole: PGRoleReplica,
-				LabelPGInstanceName: clusterName + "-" + idx,
-			},
-		},
-		Spec: corev1.PodSpec{
-			NodeSelector: map[string]string{
-				"topology.kubernetes.io/region": region,
-			},
-		},
-		Status: corev1.PodStatus{
-			Phase: corev1.PodRunning,
-		},
-	}
-	clus.RegisterOrUpdateInstance(idx, region, true)
-	if primary {
-		pd.ObjectMeta.Labels[LabelPGInstanceRole] = PGRolePrimary
-		clus.primary = idx
-		clus.desiredPrimary = idx
-	}
-	return pd
 }
