@@ -18,6 +18,12 @@ spec:
       port: {{ .Values.service.port }}
       protocol: TCP
       targetPort: {{ .Values.ports.tls }}
+    {{- if .Values.metrics.enabled }}
+    - targetPort: {{ .Values.ports.metrics }}
+      port: {{ .Values.ports.metrics }}
+      name: metrics
+      protocol: TCP
+    {{- end }}
   selector:
     {{- include "toperator.selectorLabels" . | nindent 4 }}
   sessionAffinity: None

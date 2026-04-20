@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 
 	"github.com/go-logr/logr"
 	"github.com/spf13/viper"
@@ -12,6 +13,7 @@ import (
 )
 
 const clusterContext = "cluster"
+const LevelTrace slog.Level = -8
 
 type ContextHandler struct {
 	slog.Handler
@@ -31,9 +33,14 @@ func EnrichContext(current context.Context, clusterName string) context.Context 
 
 func InitLogging() {
 	var level slog.Level
-	err := level.UnmarshalText([]byte(viper.GetString(LogLevel)))
-	if err != nil {
-		panic(fmt.Errorf("invalid log level %q: %w", viper.GetString(LogLevel), err))
+	levelString := viper.GetString(LogLevel)
+	if strings.EqualFold(levelString, "trace") {
+		level = LevelTrace
+	} else {
+		err := level.UnmarshalText([]byte(viper.GetString(LogLevel)))
+		if err != nil {
+			panic(fmt.Errorf("invalid log level %q: %w", viper.GetString(LogLevel), err))
+		}
 	}
 
 	options := &slog.HandlerOptions{

@@ -14,7 +14,7 @@ import (
 const mutationEndpoint string = "/mutate-clusters"
 const MutationConfigName string = "postgres-cluster-update"
 
-func Setup(mgr ctrl.Manager) error {
+func SetupWebhook(mgr ctrl.Manager) error {
 	return ctrl.NewWebhookManagedBy(mgr).
 		For(&pgapi.Cluster{}).
 		WithDefaulter(&defaulter{}).
@@ -40,7 +40,7 @@ func (defaulter) Default(ctx context.Context, obj runtime.Object) error {
 		return nil
 	}
 	if currentPrimary == desiredPrimary {
-		slog.DebugContext(ctx, "Current primary is already target primary on cluster")
+		slog.Log(ctx, config.LevelTrace, "Current primary is already target primary on cluster")
 		return nil
 	}
 	clus := GetCluster(cluster.Namespace, cluster.Name)
@@ -54,7 +54,7 @@ func (defaulter) Default(ctx context.Context, obj runtime.Object) error {
 		return nil
 	}
 	if eligible, reason := isEligible(inst, false); eligible {
-		slog.DebugContext(ctx, fmt.Sprintf("Desired primary %s is already eligible primary", desiredPrimary))
+		slog.Log(ctx, config.LevelTrace, fmt.Sprintf("Desired primary %s is already eligible primary", desiredPrimary))
 		return nil
 	} else {
 		slog.InfoContext(ctx, fmt.Sprintf("Intercept primary election to not use %s: %s", desiredPrimary, reason))

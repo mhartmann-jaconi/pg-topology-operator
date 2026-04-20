@@ -32,7 +32,7 @@ func TestApplyNodeSelector(t *testing.T) {
 	g.Expect(err).To(HaveOccurred())
 
 	// nothing should change, as the node selector is already applied
-	clus := postgres.RegisterOrUpdateCluster("", clusterName, "", "", 2)
+	clus := postgres.RegisterOrUpdateCluster("", clusterName, "", "", 3, 2)
 	err = applyNodeSelector(ctx, pod1)
 	g.Expect(err).To(BeNil())
 	g.Expect(pod1.Spec.NodeSelector[regionLabel]).To(Equal("region1"))

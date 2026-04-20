@@ -18,12 +18,13 @@ import (
 const MaxInt = 500000
 
 type Cluster struct {
-	name           string
-	namespace      string
-	instances      map[string]*Instance
-	primary        string
-	desiredPrimary string
-	syncNum        int
+	name             string
+	namespace        string
+	desiredInstances int
+	instances        map[string]*Instance
+	primary          string
+	desiredPrimary   string
+	syncNum          int
 }
 
 type Instance struct {
@@ -43,22 +44,26 @@ func clusterKey(clusterNamespace, clusterName string) (clusterKey string) {
 
 // RegisterOrUpdateCluster will register a cluster if it does not exist yet or update
 // an existing cluster.
-func RegisterOrUpdateCluster(clusterNamespace, clusterName, primaryInstanceId, desiredPrimaryId string, numStandby int) *Cluster {
+func RegisterOrUpdateCluster(clusterNamespace, clusterName, primaryInstanceId, desiredPrimaryId string, desiredInstances, numStandby int) *Cluster {
 	key := clusterKey(clusterNamespace, clusterName)
 	if clus, ok := clusters[key]; ok {
 		clus.primary = primaryInstanceId
+		clus.desiredInstances = desiredInstances
 		clus.syncNum = numStandby
 		clus.namespace = clusterNamespace
 		clus.desiredPrimary = desiredPrimaryId
 	} else {
 		clusters[key] = &Cluster{
-			instances:      map[string]*Instance{},
-			namespace:      clusterNamespace,
-			name:           clusterName,
-			primary:        primaryInstanceId,
-			desiredPrimary: desiredPrimaryId,
-			syncNum:        numStandby,
+			instances:        map[string]*Instance{},
+			namespace:        clusterNamespace,
+			name:             clusterName,
+			primary:          primaryInstanceId,
+			desiredPrimary:   desiredPrimaryId,
+			desiredInstances: desiredInstances,
+			syncNum:          numStandby,
 		}
+		ctx := config.EnrichContext(context.TODO(), clusterName)
+		slog.InfoContext(ctx, "Registered cluster")
 	}
 	return clusters[key]
 }
@@ -109,6 +114,10 @@ func (clus *Cluster) GetPrimaryInstance() *Instance {
 	return clus.instances[clus.primary]
 }
 
+func (clus *Cluster) RegistrationComplete() bool {
+	return clus.desiredInstances <= len(clus.instances)
+}
+
 func (clus *Cluster) RegisterOrUpdateInstance(instanceId, region string, isHealthy bool) *Instance {
 	ctx := config.EnrichContext(context.TODO(), clus.name)
 	if _, err := strconv.Atoi(instanceId); err != nil {
@@ -142,6 +151,11 @@ func (clus *Cluster) MarkInactive(instanceId string) {
 
 func (clus *Cluster) initiateSwitchover() error {
 	ctx := config.EnrichContext(context.TODO(), clus.name)
+	if !clus.RegistrationComplete() {
+		// can't do switchover as long as not all instances are registered
+		slog.WarnContext(ctx, "Not all instances registered yet, skip switchover")
+		return fmt.Errorf("cluster not fully registered yet")
+	}
 	if err := initiateSwitchover(ctx, clus); err != nil {
 		slog.ErrorContext(ctx, "Failed to change primary instance for cluster", "err", err)
 		return err

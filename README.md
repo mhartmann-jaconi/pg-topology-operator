@@ -34,14 +34,14 @@ helm install pg-topology helm -n cnpg-system
 ### docker
 
 ```
-docker build . -f Dockerfile -t docker.lp.rsint.net/platform/pg-topology-operator:v0.9.8
-docker push docker.lp.rsint.net/platform/pg-topology-operator:v0.9.8
+docker build . -f Dockerfile -t docker.lp.rsint.net/platform/pg-topology-operator:v0.10.0
+docker push docker.lp.rsint.net/platform/pg-topology-operator:v0.10.0
 ```
 or
 ```
 export AD_USER=...
 export AD_PASSWORD=...
-make DOCKER_TAG=v0.9.8 docker-upload
+make DOCKER_TAG=v0.10.0 docker-upload
 ```
 
 ### helm
@@ -90,6 +90,21 @@ For logging, we use golangs [slog](https://go.dev/blog/slog) package. Exposed fi
 * cluster - (optional) name of the Postgres cluster
 * err - (optional) underlying error message in error logs
 
+### Visibility
+
+The operator can expose prometheus metrics on port `9000`. To enable that, add the following to helm values
+```
+metrics:
+  enabled: true
+```
+
+In addition [pprof debug endpoint](https://go.dev/wiki/Performance) can be enabled on port `1234` via helm setting
+```
+debug:
+  enabled: true
+```
+
 ## TODO
 
-* Build some kind of integration tests (for example, with [kind](https://kind.sigs.k8s.io/)).
+* Build some kind of integration tests (for example, with [kind](https://kind.sigs.k8s.io/)). Or re-use the existing 
+  implementation from local-datacenter-simulator

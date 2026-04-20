@@ -8,6 +8,7 @@ import (
 
 	pgapi "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	"github.com/jaconi-io/ipoque-pg-webhook/pkg/cluster"
+	"github.com/jaconi-io/ipoque-pg-webhook/pkg/config"
 	"github.com/jaconi-io/ipoque-pg-webhook/pkg/events"
 	"github.com/thejerf/slogassert"
 
@@ -23,7 +24,7 @@ func TestDefault(t *testing.T) {
 	g := NewWithT(t)
 	ctx := context.TODO()
 
-	handler := slogassert.New(t, slog.LevelDebug, slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{}))
+	handler := slogassert.New(t, config.LevelTrace, slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{}))
 	slog.SetDefault(slog.New(handler))
 
 	events.SetListenersForRegionChange(func(ctx context.Context, s string) {})
@@ -63,7 +64,7 @@ func TestDefault(t *testing.T) {
 	handler.AssertMessage("Cluster is not registered yet")
 	handler.Reset()
 
-	internalCluster := RegisterOrUpdateCluster("default", "clus", "1", "1", 2)
+	internalCluster := RegisterOrUpdateCluster("default", "clus", "1", "1", 3, 2)
 
 	// instance not registered
 	err = webhook.Default(ctx, clus)

@@ -3,15 +3,22 @@ package main
 import (
 	"errors"
 	"fmt"
+	"log"
+	"log/slog"
 	"net/http"
+	"net/http/pprof"
 	"os"
 	"time"
 
 	"github.com/jaconi-io/ipoque-pg-webhook/pkg/cluster"
 	"github.com/jaconi-io/ipoque-pg-webhook/pkg/config"
+	"github.com/jaconi-io/ipoque-pg-webhook/pkg/healthcheck"
 	"github.com/jaconi-io/ipoque-pg-webhook/pkg/pods"
 	"github.com/jaconi-io/ipoque-pg-webhook/pkg/postgres"
 	"github.com/jaconi-io/ipoque-pg-webhook/pkg/webhook"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	pgapi "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	pgtls "github.com/jaconi-io/ipoque-pg-webhook/pkg/tls"
@@ -69,21 +76,29 @@ func main() {
 				return err
 			}
 
-			if err = pods.Setup(mgr); err != nil {
+			if err = pods.SetupWebhook(mgr); err != nil {
 				return fmt.Errorf("failed to setup pod webhook: %w", err)
 			}
-			if err = postgres.Setup(mgr); err != nil {
+			if err = postgres.SetupWebhook(mgr); err != nil {
 				return fmt.Errorf("failed to setup cluster webhook: %w", err)
 			}
 
+			watchdog, err := healthcheck.Setup(mgr)
+			if err != nil {
+				return fmt.Errorf("failed to setup healthcheck watchdog: %w", err)
+			}
+
 			// add a health check which verifies that at least the primary region is known
-			mgr.AddReadyzCheck("primary", func(req *http.Request) error {
+			mgr.AddReadyzCheck("watch-primary", func(req *http.Request) error {
 				if cluster.GetPrimaryRegion() == "" {
 					return errors.New("no primary region yet")
 				}
-
 				return nil
 			})
+			mgr.AddHealthzCheck("watch-events", watchdog.HealthzCheck)
+
+			go exposePrometheusMetrics()
+			go exposeDebugInfo()
 
 			caCert, err := pgtls.Generate()
 			if err != nil {
@@ -114,4 +129,34 @@ func main() {
 	if err != nil {
 		os.Exit(1)
 	}
+}
+
+func exposePrometheusMetrics() {
+	if !viper.GetBool(config.MetricsEnabled) {
+		return
+	}
+	port := viper.GetInt(config.MetricsPort)
+	slog.Info(fmt.Sprintf("Expose Prometheus metrics on port %d", port))
+	reg := prometheus.NewRegistry()
+	reg.MustRegister(
+		collectors.NewGoCollector(),
+		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
+	)
+	http.Handle("/", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))
+	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", port), nil))
+}
+
+func exposeDebugInfo() {
+	if !viper.GetBool(config.DebugEnabled) {
+		return
+	}
+	port := viper.GetInt(config.DebugPort)
+	slog.Info(fmt.Sprintf("Expose debug information on port %d", port))
+	mux := http.NewServeMux()
+	// Add pprof endpoints
+	mux.HandleFunc("/debug/pprof/", pprof.Index)
+	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+	//mux.HandleFunc("/debug/pprof/heap", pprof.Heap)
+	//mux.HandleFunc("/debug/pprof/goroutine", pprof.Goroutine)
+	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", port), mux))
 }

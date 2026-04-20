@@ -37,6 +37,18 @@ ports:
   http: 8081
   ## @param ports.tls The container TLS port
   tls: 9443
+  ## @param ports.metrics The container port to expose metrics on
+  metrics: 9000
+  ## @param ports.debug The container port to expose go runtime information on
+  debug: 1234
+
+metrics:
+  ## @param metrics.enabled enable prometheus metrics
+  enabled: false
+
+debug:
+  ## @param debug.enabled enable golang runtime debug endpoint
+  enabled: false
 
 ## @param resources The controller container resources.
 resources:

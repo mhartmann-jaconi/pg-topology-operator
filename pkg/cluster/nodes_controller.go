@@ -3,6 +3,7 @@ package cluster
 import (
 	"context"
 	"fmt"
+	"log"
 	"log/slog"
 
 	"github.com/jaconi-io/ipoque-pg-webhook/pkg/config"
@@ -11,12 +12,17 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 type Reconciler struct {
 	client.Client
+}
+
+func (r *Reconciler) GetObjectType() string {
+	return "Node"
 }
 
 var _ reconcile.Reconciler = &Reconciler{}
@@ -29,12 +35,14 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		if errors.IsNotFound(err) {
 			return reconcile.Result{}, nil
 		}
+
 		slog.Error(fmt.Sprintf("failed to read node: %s", request.Name), "err", err)
 		return reconcile.Result{}, err
 	}
 
 	if !isHealthy(node) {
 		// ignore
+		slog.Debug(fmt.Sprintf("Ignore node %s as it is not healthy", node.Name))
 		return reconcile.Result{}, nil
 	}
 
@@ -58,8 +66,13 @@ func isHealthy(node *v1.Node) bool {
 	return !node.Spec.Unschedulable
 }
 
-func InitController(mgr manager.Manager) {
-	ctrl.NewControllerManagedBy(mgr).
+func InitController(mgr manager.Manager) reconcile.Reconciler {
+	reco, err := ctrl.NewControllerManagedBy(mgr).
 		For(&v1.Node{}).
-		Complete(&Reconciler{Client: mgr.GetClient()})
+		WithOptions(controller.TypedOptions[reconcile.Request]{MaxConcurrentReconciles: 2}).
+		Build(&Reconciler{Client: mgr.GetClient()})
+	if err != nil {
+		log.Fatal(err)
+	}
+	return reco
 }

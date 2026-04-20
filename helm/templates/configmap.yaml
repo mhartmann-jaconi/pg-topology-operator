@@ -9,6 +9,12 @@ data:
       namespace: {{ .Release.Namespace }}
     pod:
       port: {{ .Values.ports.tls }}
+    metrics:
+      enabled: {{ .Values.metrics.enabled }}
+      port: {{ .Values.ports.metrics }}
+    debug:
+      enabled: {{ .Values.debug.enabled }}
+      port: {{ .Values.ports.debug }}
     certificate:
       organization: {{ .Values.webhook.organization }}
     topology:

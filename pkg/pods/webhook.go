@@ -19,7 +19,7 @@ import (
 const mutationEndpoint string = "/mutate-pods"
 const MutationConfigName string = "postgres-pod-update"
 
-func Setup(mgr ctrl.Manager) error {
+func SetupWebhook(mgr ctrl.Manager) error {
 	return ctrl.NewWebhookManagedBy(mgr).
 		For(&corev1.Pod{}).
 		WithDefaulter(&defaulter{}).
@@ -61,18 +61,21 @@ func applyNodeSelector(ctx context.Context, pod *corev1.Pod) error {
 		return fmt.Errorf("cluster %s not found", clusterName)
 	}
 	if clus.GetCurrentPrimaryInstanceId() != "" {
-		slog.DebugContext(ctx, fmt.Sprintf("Ignore pod %s for webhook, as a primary instance is already stored", pod.Name))
+		slog.Log(ctx, config.LevelTrace, fmt.Sprintf("Ignore pod %s for webhook, as a primary instance is already stored", pod.Name))
 		// already processed
 		return nil
 	}
 	if !isInitialPrimary(pod) {
 		// ignore
-		slog.DebugContext(ctx, fmt.Sprintf("Ignore pod %s for webhook, as it is not a primary instance", pod.Name))
+		slog.Log(ctx, config.LevelTrace, fmt.Sprintf("Ignore pod %s for webhook, as it is not a primary instance", pod.Name))
 		return nil
 	}
 
 	labelRegion := viper.GetString(config.LabelRegion)
 	primaryRegion := cluster.GetPrimaryRegion()
+	if primaryRegion == "" {
+		return fmt.Errorf("primary region not set yet")
+	}
 
 	slog.InfoContext(ctx, fmt.Sprintf("Applying selector for region %s on pod %s", primaryRegion, pod.Name))
 

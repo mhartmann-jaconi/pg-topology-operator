@@ -1,0 +1,13 @@
+{{- if .Values.metrics.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: {{ include "toperator.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  selector:
+    matchLabels:
+      helm.sh/chart: {{ include "toperator.chart" . }}
+  podMetricsEndpoints:
+  - port: metrics
+{{- end }}

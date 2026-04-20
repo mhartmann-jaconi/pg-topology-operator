@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"fmt"
+	"log"
 	"log/slog"
 
 	pgapi "github.com/cloudnative-pg/cloudnative-pg/api/v1"
@@ -11,6 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
@@ -21,13 +23,17 @@ type Reconciler struct {
 	client.Client
 }
 
+func (r *Reconciler) GetObjectType() string {
+	return "Cluster"
+}
+
 var _ reconcile.Reconciler = &Reconciler{}
 
 // Reconcile gets notified of all changes for a PG cluster and put's its information
 // into the internal state map (such as current primary, number of standbies, etc)
 func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	cluster := &pgapi.Cluster{}
-	err := r.Client.Get(context.TODO(), request.NamespacedName, cluster)
+	err := r.Client.Get(ctx, request.NamespacedName, cluster)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// cluster was deleted
@@ -46,11 +52,12 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	}
 
 	clusterName := cluster.Name
+	desiredInstanceCount := cluster.Spec.Instances
 	primaryInstanceId := ExtractInstanceId(clusterName, cluster.Status.CurrentPrimary)
 	desiredPrimaryInstanceId := ExtractInstanceId(clusterName, cluster.Status.TargetPrimary)
 	standbies := getStandbyInstanceCount(cluster)
 
-	RegisterOrUpdateCluster(request.Namespace, clusterName, primaryInstanceId, desiredPrimaryInstanceId, standbies)
+	RegisterOrUpdateCluster(request.Namespace, clusterName, primaryInstanceId, desiredPrimaryInstanceId, desiredInstanceCount, standbies)
 
 	return reconcile.Result{}, nil
 }
@@ -70,9 +77,14 @@ func getStandbyInstanceCount(cluster *pgapi.Cluster) int {
 	}
 }
 
-func InitController(mangr manager.Manager) {
+func InitController(mangr manager.Manager) reconcile.Reconciler {
 	mgr = mangr
-	ctrl.NewControllerManagedBy(mangr).
+	reco, err := ctrl.NewControllerManagedBy(mangr).
 		For(&pgapi.Cluster{}).
-		Complete(&Reconciler{Client: mangr.GetClient()})
+		WithOptions(controller.TypedOptions[reconcile.Request]{MaxConcurrentReconciles: 2}).
+		Build(&Reconciler{Client: mangr.GetClient()})
+	if err != nil {
+		log.Fatal(err)
+	}
+	return reco
 }

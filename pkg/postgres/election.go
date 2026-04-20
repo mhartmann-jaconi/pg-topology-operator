@@ -20,7 +20,7 @@ import (
 // cluster and check which instance is a sync-replica and in the desired AZ. This instance
 // is then set as desired new primary on the cluster.
 func changePrimaryInstances(newLeadingZone string) error {
-	slog.Info(fmt.Sprintf("Received event for primary AZ change to %s", newLeadingZone))
+	slog.Info(fmt.Sprintf("Received event for primary AZ change to %s. Updating %d clusters", newLeadingZone, len(clusters)))
 	clusterLeft := make([]*Cluster, len(clusters))
 	count := 0
 	for _, clus := range clusters {
@@ -31,7 +31,7 @@ func changePrimaryInstances(newLeadingZone string) error {
 		wait.Backoff{
 			Duration: 1 * time.Second,
 			Factor:   1.5,
-			Steps:    -1,
+			Steps:    60,
 			Jitter:   0.0,
 		},
 		func(err error) bool {
@@ -40,6 +40,7 @@ func changePrimaryInstances(newLeadingZone string) error {
 		func() error {
 			var errx error
 			clusterErrors := make([]*Cluster, 0)
+			slog.Info(fmt.Sprintf("Starting update of %d clusters", len(clusterLeft)))
 			for _, clus := range clusterLeft {
 				if err := clus.initiateSwitchover(); err != nil {
 					errx = err

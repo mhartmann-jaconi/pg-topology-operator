@@ -3,6 +3,7 @@ package pods
 import (
 	"context"
 	"fmt"
+	"log"
 	"log/slog"
 
 	"github.com/jaconi-io/ipoque-pg-webhook/pkg/cluster"
@@ -12,12 +13,17 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 type Reconciler struct {
 	client.Client
+}
+
+func (r *Reconciler) GetObjectType() string {
+	return "Pod"
 }
 
 var _ reconcile.Reconciler = &Reconciler{}
@@ -49,9 +55,9 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 
 	clus := postgres.GetCluster(pod.Namespace, clusterName)
 	if clus == nil {
-		// cluster not existing in internal state
+		// cluster not existing yet in internal state, retry
 		slog.WarnContext(ctx, fmt.Sprintf("Cluster is not existing, skip processing of %s", pod.Name))
-		return reconcile.Result{}, nil
+		return reconcile.Result{}, fmt.Errorf("cluster not regstered yet")
 	}
 
 	if pod.DeletionTimestamp != nil {
@@ -67,6 +73,11 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	nodeName := pod.Spec.NodeName
 	region := cluster.GetRegionOfNode(nodeName)
 	podIsHealthy := isHealthy(pod)
+
+	if region == "" {
+		slog.DebugContext(ctx, fmt.Sprintf("Skip %s as node is %s not registered yet", pod.Name, nodeName))
+		return reconcile.Result{}, fmt.Errorf("node not registered yet")
+	}
 
 	clus.RegisterOrUpdateInstance(instanceId, region, podIsHealthy)
 
@@ -85,8 +96,13 @@ func isHealthy(pod *v1.Pod) bool {
 	return true
 }
 
-func InitController(mgr manager.Manager) {
-	ctrl.NewControllerManagedBy(mgr).
+func InitController(mgr manager.Manager) reconcile.Reconciler {
+	reco, err := ctrl.NewControllerManagedBy(mgr).
 		For(&v1.Pod{}).
-		Complete(&Reconciler{Client: mgr.GetClient()})
+		WithOptions(controller.TypedOptions[reconcile.Request]{MaxConcurrentReconciles: 2}).
+		Build(&Reconciler{Client: mgr.GetClient()})
+	if err != nil {
+		log.Fatal(err)
+	}
+	return reco
 }

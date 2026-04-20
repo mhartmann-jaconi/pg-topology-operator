@@ -32,7 +32,7 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.name
-          image: {{ .Values.image.repository }}:{{ default .Chart.AppVersion .Values.image.tag }}
+          image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           name: manager
           ports:
@@ -42,6 +42,16 @@ spec:
             - containerPort: {{ .Values.ports.tls }}
               name: https
               protocol: TCP
+            {{- if .Values.metrics.enabled }}
+            - containerPort: {{ .Values.ports.metrics }}
+              name: metrics
+              protocol: TCP
+            {{- end }}
+            {{- if .Values.debug.enabled }}
+            - containerPort: {{ .Values.ports.debug }}
+              name: debug
+              protocol: TCP
+            {{- end }}
           readinessProbe:
             failureThreshold: 20
             httpGet:
@@ -49,6 +59,17 @@ spec:
               port: {{ .Values.ports.http }}
             periodSeconds: 10
             successThreshold: 1
+            failureThreshold: 10
+            timeoutSeconds: 2
+          livenessProbe:
+            failureThreshold: 20
+            httpGet:
+              path: /healthz
+              port: {{ .Values.ports.http }}
+            periodSeconds: 15
+            successThreshold: 1
+            failureThreshold: 3
+            initialDelaySeconds: 60
             timeoutSeconds: 2
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
