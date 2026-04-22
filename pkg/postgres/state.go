@@ -62,7 +62,7 @@ func RegisterOrUpdateCluster(clusterNamespace, clusterName, primaryInstanceId, d
 			desiredInstances: desiredInstances,
 			syncNum:          numStandby,
 		}
-		ctx := config.EnrichContext(context.TODO(), clusterName)
+		ctx := config.EnrichContext(context.Background(), clusterName)
 		slog.InfoContext(ctx, "Registered cluster")
 	}
 	return clusters[key]
@@ -70,7 +70,7 @@ func RegisterOrUpdateCluster(clusterNamespace, clusterName, primaryInstanceId, d
 
 func DropCluster(clusterNamespace, clusterName string) {
 	if _, ok := clusters[clusterKey(clusterNamespace, clusterName)]; !ok {
-		ctx := config.EnrichContext(context.TODO(), clusterName)
+		ctx := config.EnrichContext(context.Background(), clusterName)
 		slog.InfoContext(ctx, "Remove cluster from internal state")
 	}
 	delete(clusters, clusterKey(clusterNamespace, clusterName))
@@ -119,7 +119,7 @@ func (clus *Cluster) RegistrationComplete() bool {
 }
 
 func (clus *Cluster) RegisterOrUpdateInstance(instanceId, region string, isHealthy bool) *Instance {
-	ctx := config.EnrichContext(context.TODO(), clus.name)
+	ctx := config.EnrichContext(context.Background(), clus.name)
 	if _, err := strconv.Atoi(instanceId); err != nil {
 		slog.ErrorContext(ctx, fmt.Sprintf("Instance could not be created, ID %s is not a number", instanceId), "err", err)
 		return nil
@@ -149,8 +149,8 @@ func (clus *Cluster) MarkInactive(instanceId string) {
 	}
 }
 
-func (clus *Cluster) initiateSwitchover() error {
-	ctx := config.EnrichContext(context.TODO(), clus.name)
+func (clus *Cluster) initiateSwitchover(ctx context.Context) error {
+	ctx = config.EnrichContext(ctx, clus.name)
 	if !clus.RegistrationComplete() {
 		// can't do switchover as long as not all instances are registered
 		slog.WarnContext(ctx, "Not all instances registered yet, skip switchover")
@@ -173,7 +173,7 @@ func (inst *Instance) IsActive() bool {
 
 func (inst *Instance) MarkInactive() {
 	if inst.active {
-		ctx := config.EnrichContext(context.TODO(), inst.cluster.name)
+		ctx := config.EnrichContext(context.Background(), inst.cluster.name)
 		slog.InfoContext(ctx, fmt.Sprintf("Marking instance %s as not active", inst.instanceId))
 	}
 	inst.active = false

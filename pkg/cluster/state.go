@@ -1,7 +1,6 @@
 package cluster
 
 import (
-	"context"
 	"fmt"
 	"log/slog"
 
@@ -54,7 +53,7 @@ func Store(nodeName, regionName string, leader bool) {
 
 		// there is a new leader, so we need to change the primary instance
 		slog.Info(fmt.Sprintf("region %s changed to become the new leading region", regionName))
-		events.PrimaryRegionChanged.Emit(context.TODO(), regionName)
+		events.PrimaryRegionChanged(regionName)
 	}
 }
 

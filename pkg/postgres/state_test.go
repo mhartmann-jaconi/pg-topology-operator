@@ -8,7 +8,7 @@ import (
 
 func TestGetInstances(t *testing.T) {
 	g := NewWithT(t)
-	defer cleanup()
+	defer teardown()
 
 	// tests the sorting of the return value
 	clus := RegisterOrUpdateCluster("", "foo", "1", "1", 5, 2)
@@ -28,7 +28,7 @@ func TestGetInstances(t *testing.T) {
 
 func TestRegisterOrUpdateInstance(t *testing.T) {
 	g := NewWithT(t)
-	defer cleanup()
+	defer teardown()
 
 	// test that instances are updated inline and not replaced
 	clus := RegisterOrUpdateCluster("", "foo", "1", "1", 2, 2)
@@ -47,7 +47,7 @@ func TestRegisterOrUpdateInstance(t *testing.T) {
 
 func TestMarkInactive(t *testing.T) {
 	g := NewWithT(t)
-	defer cleanup()
+	defer teardown()
 
 	clus := RegisterOrUpdateCluster("", "foo", "1", "1", 1, 2)
 	inst := clus.RegisterOrUpdateInstance("1", "", true)
@@ -59,7 +59,7 @@ func TestMarkInactive(t *testing.T) {
 
 func TestRegistrationComplete(t *testing.T) {
 	g := NewWithT(t)
-	defer cleanup()
+	defer teardown()
 
 	clus := RegisterOrUpdateCluster("", "foo", "1", "1", 2, 2)
 	g.Expect(clus.RegistrationComplete()).To(BeFalse())
@@ -73,7 +73,7 @@ func TestRegistrationComplete(t *testing.T) {
 
 func TestIsSyncReplica(t *testing.T) {
 	g := NewWithT(t)
-	defer cleanup()
+	defer teardown()
 
 	clus := RegisterOrUpdateCluster("", "foo", "1", "1", 6, 2)
 	inst1 := clus.RegisterOrUpdateInstance("1", "", true)
@@ -95,8 +95,4 @@ func TestIsSyncReplica(t *testing.T) {
 
 	g.Expect(inst3.IsSyncReplica()).To(BeTrue())  // now a sync one
 	g.Expect(inst5.IsSyncReplica()).To(BeFalse()) // not sync anymore
-}
-
-func cleanup() {
-	clusters = make(map[string]*Cluster)
 }

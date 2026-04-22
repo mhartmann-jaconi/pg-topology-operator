@@ -3,6 +3,7 @@ package cluster
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/jaconi-io/ipoque-pg-webhook/pkg/events"
 	. "github.com/onsi/gomega"
@@ -14,21 +15,24 @@ func TestStore(t *testing.T) {
 	defer cleanup()
 
 	eventCounter := 0
-	events.AddListenerForRegionChange(func(ctx context.Context, s string) { eventCounter = eventCounter + 1 })
+	events.AddListenerForRegionChange(func(ctx context.Context, s string) {
+		eventCounter++
+	})
+	getEventCounter := func() int { return eventCounter }
 
 	Store("node1", "dc-01", false)
 	Store("node2", "dc-02", false)
-	g.Expect(eventCounter).To(Equal(0))
 
 	g.Expect(GetPrimaryRegion()).To(BeEmpty())
+	g.Eventually(eventCounter, 20*time.Millisecond).Should(Equal(0))
 
 	Store("node1", "dc-01", true)
 	g.Expect(GetPrimaryRegion()).To(Equal("dc-01"))
-	g.Expect(eventCounter).To(Equal(1))
+	g.Eventually(getEventCounter, 20*time.Millisecond).Should(Equal(1))
 
 	Store("node2", "dc-02", true)
 	g.Expect(GetPrimaryRegion()).To(Equal("dc-02"))
-	g.Expect(eventCounter).To(Equal(2))
+	g.Eventually(getEventCounter, 20*time.Millisecond).Should(Equal(2))
 }
 
 func TestGetPrimaryRegion(t *testing.T) {

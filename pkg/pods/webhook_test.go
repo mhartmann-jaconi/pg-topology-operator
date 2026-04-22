@@ -25,7 +25,7 @@ var webhook = defaulter{}
 
 func TestDefault(t *testing.T) {
 	g := NewWithT(t)
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	handler := slogassert.New(t, config.LevelTrace, slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{}))
 	slog.SetDefault(slog.New(handler))
@@ -75,8 +75,9 @@ func TestApplyNodeSelector(t *testing.T) {
 	defer viper.Reset()
 	cluster.Store("node1", "region1", true)
 	cluster.Store("node2", "region2", false)
+	defer cluster.ClearState()
 
-	ctx := config.EnrichContext(context.TODO(), clusterName)
+	ctx := config.EnrichContext(context.Background(), clusterName)
 
 	// cluster not existing
 	pod := createPod("1", "region1", false)
@@ -118,6 +119,29 @@ func TestApplyNodeSelector(t *testing.T) {
 	g.Expect(pod.Spec.NodeSelector[regionLabel]).To(Equal("region2"))
 }
 
+func TestApplyNodeSelector_RejectsInitialPodWhenPrimaryRegionNotSet(t *testing.T) {
+	g := NewWithT(t)
+
+	// Wipe global region state lingering from previous test executions
+	cluster.Store("reset-node", "region1", false)
+	defer cluster.ClearState()
+
+	ctx := config.EnrichContext(context.Background(), clusterName)
+
+	// Register cluster natively, but do NOT register any nodes as leaders (simulating missing label)
+	postgres.RegisterOrUpdateCluster("", clusterName, "", "", 3, 2)
+	defer postgres.DropCluster("", clusterName)
+
+	// Boot the initial primary pod
+	pod1 := createPod("1", "", true)
+	pod1.ObjectMeta.Labels[postgres.LabelPGJobRole] = "initdb"
+
+	// Because no region is set, the pod webhook fatally rejects the initial pod creation.
+	err := applyNodeSelector(ctx, pod1)
+	g.Expect(err).To(HaveOccurred())
+	g.Expect(err.Error()).To(ContainSubstring("primary region not set yet"))
+}
+
 func createPod(idx, region string, primary bool) *corev1.Pod {
 	pd := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -156,25 +180,4 @@ func createPod(idx, region string, primary bool) *corev1.Pod {
 		pd.ObjectMeta.Labels[postgres.LabelPGInstanceRole] = postgres.PGRolePrimary
 	}
 	return pd
-}
-
-func TestApplyNodeSelector_RejectsInitialPodWhenPrimaryRegionNotSet(t *testing.T) {
-	g := NewWithT(t)
-
-	// Wipe global region state lingering from previous test executions
-	cluster.Store("reset-node", "region1", false)
-
-	ctx := config.EnrichContext(context.TODO(), clusterName)
-
-	// Register cluster natively, but do NOT register any nodes as leaders (simulating missing label)
-	postgres.RegisterOrUpdateCluster("", clusterName, "", "", 3, 2)
-	defer postgres.DropCluster("", clusterName)
-
-	// Boot the initial primary pod
-	pod1 := createPod("1", "", true)
-
-	// Because no region is set, the pod webhook fatally rejects the initial pod creation.
-	err := applyNodeSelector(ctx, pod1)
-	g.Expect(err).To(HaveOccurred())
-	g.Expect(err.Error()).To(ContainSubstring("primary region not set yet"))
 }

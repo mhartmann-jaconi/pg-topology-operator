@@ -34,7 +34,7 @@ func update(ctx context.Context, client kubernetes.Interface, ca *bytes.Buffer, 
 		existing.Webhooks[0].ClientConfig.CABundle = ca.Bytes()
 		_, err := client.AdmissionregistrationV1().
 			MutatingWebhookConfigurations().
-			Update(context.TODO(), existing, metav1.UpdateOptions{})
+			Update(ctx, existing, metav1.UpdateOptions{})
 		return err
 	}
 }

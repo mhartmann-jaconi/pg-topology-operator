@@ -13,13 +13,13 @@ import (
 
 var cli client.Client = nil
 
-func readCluster(namespace, name string) (*pgapi.Cluster, error) {
+func readCluster(ctx context.Context, namespace, name string) (*pgapi.Cluster, error) {
 	clus := &pgapi.Cluster{}
-	err := getClient().Get(context.TODO(), types.NamespacedName{Name: name, Namespace: namespace}, clus)
+	err := getClient().Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, clus)
 	return clus, err
 }
 
-func patchClusterWithRetry(namespace, name string, change func(*pgapi.Cluster) (*pgapi.Cluster, bool)) error {
+func patchClusterWithRetry(ctx context.Context, namespace, name string, change func(*pgapi.Cluster) (*pgapi.Cluster, bool)) error {
 	return retry.OnError(
 		wait.Backoff{
 			Duration: 1 * time.Second,
@@ -31,7 +31,7 @@ func patchClusterWithRetry(namespace, name string, change func(*pgapi.Cluster) (
 			return true
 		},
 		func() error {
-			cluster, err := readCluster(namespace, name)
+			cluster, err := readCluster(ctx, namespace, name)
 			if err != nil {
 				return err
 			}
@@ -40,7 +40,7 @@ func patchClusterWithRetry(namespace, name string, change func(*pgapi.Cluster) (
 				return nil
 			}
 			return getClient().Status().Patch(
-				context.TODO(),
+				ctx,
 				modified,
 				client.MergeFrom(cluster),
 			)

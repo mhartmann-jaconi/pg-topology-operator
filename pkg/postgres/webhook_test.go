@@ -28,12 +28,12 @@ const (
 func TestDefault(t *testing.T) {
 
 	g := NewWithT(t)
-	ctx := context.TODO()
+	ctx := context.Background()
 
 	handler := slogassert.New(t, config.LevelTrace, slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{}))
 	slog.SetDefault(slog.New(handler))
 
-	events.SetListenersForRegionChange(func(ctx context.Context, s string) {})
+	events.SetListenersForRegionChange(func(context.Context, string) {})
 
 	// not a cluster object
 	pod := &v1.Pod{}
@@ -107,8 +107,11 @@ func TestDefault(t *testing.T) {
 
 func TestDefault_PermitsFallbackFailoverWhenLocalUnavailable(t *testing.T) {
 	g := NewWithT(t)
-	ctx := context.TODO()
-	events.SetListenersForRegionChange(func(ctx context.Context, s string) {})
+	ctx := context.Background()
+
+	defer teardown()
+
+	events.SetListenersForRegionChange(func(context.Context, string) {})
 
 	// Simulate CloudNativePG attempting a cross-region failover during dc-01 brownout
 	clus := buildCluster(
@@ -118,7 +121,6 @@ func TestDefault_PermitsFallbackFailoverWhenLocalUnavailable(t *testing.T) {
 
 	// Register the topology internals (simulate dc-01 nodes as offline/missing by not registering them)
 	internalCluster := RegisterOrUpdateCluster(webhookTestNamespace, webhookTestCluster, "1", "1", 3, 2)
-	defer DropCluster(webhookTestNamespace, webhookTestCluster)
 	internalCluster.RegisterOrUpdateInstance("6", "dc-02", false)
 
 	// Set dc-01 as the leading zone in the topology tracker
@@ -137,8 +139,11 @@ func TestDefault_PermitsFallbackFailoverWhenLocalUnavailable(t *testing.T) {
 
 func TestDefault_UnregisteredTarget(t *testing.T) {
 	g := NewWithT(t)
-	ctx := context.TODO()
-	events.SetListenersForRegionChange(func(ctx context.Context, s string) {})
+	ctx := context.Background()
+
+	defer teardown()
+
+	events.SetListenersForRegionChange(func(context.Context, string) {})
 
 	// Simulate CloudNativePG electing a target in dc-02
 	clus := buildCluster(
@@ -149,7 +154,6 @@ func TestDefault_UnregisteredTarget(t *testing.T) {
 	// Register topology: The new target '4' has NOT been registered by the Pod Watcher yet!
 	// It is a race condition. dc-01 has a perfectly healthy node ready to take over.
 	internalCluster := RegisterOrUpdateCluster(webhookTestNamespace, webhookTestCluster, "1", "1", 3, 2)
-	defer DropCluster(webhookTestNamespace, webhookTestCluster)
 	internalCluster.RegisterOrUpdateInstance("1", "dc-01", true)
 	internalCluster.RegisterOrUpdateInstance("2", "dc-01", true) // Preferred fallback target
 
@@ -165,7 +169,9 @@ func TestDefault_UnregisteredTarget(t *testing.T) {
 
 func TestDefault_PermitsFailoverDuringColdCacheInconsistency(t *testing.T) {
 	g := NewWithT(t)
-	ctx := context.TODO()
+	ctx := context.Background()
+
+	defer teardown()
 
 	// CloudNativePG submits a cross-region failover mutation request
 	clus := buildCluster(
@@ -196,8 +202,11 @@ func TestDefault_PermitsFailoverDuringColdCacheInconsistency(t *testing.T) {
 
 func TestDefault_IgnoresLocalNodesDueToNaiveSyncReplicaSorting(t *testing.T) {
 	g := NewWithT(t)
-	ctx := context.TODO()
-	events.SetListenersForRegionChange(func(ctx context.Context, s string) {})
+	ctx := context.Background()
+
+	defer teardown()
+
+	events.SetListenersForRegionChange(func(context.Context, string) {})
 
 	// Simulate CloudNativePG natively electing a target in dc-02 (e.g., node 2)
 	clus := buildCluster(
@@ -211,7 +220,6 @@ func TestDefault_IgnoresLocalNodesDueToNaiveSyncReplicaSorting(t *testing.T) {
 
 	// Set syncNum = 0. This restricts our internal operator logic to only assign 1 Sync status slot (limit=1).
 	internalCluster := RegisterOrUpdateCluster(webhookTestNamespace, webhookTestCluster, "1", "1", 3, 0)
-	defer DropCluster(webhookTestNamespace, webhookTestCluster)
 
 	internalCluster.RegisterOrUpdateInstance("1", "dc-01", false) // Node 1 (Primary) is DEAD
 	internalCluster.RegisterOrUpdateInstance("2", "dc-02", true)  // Node 2 (Cross-region) is HEALTHY
@@ -237,7 +245,11 @@ func TestDefault_IgnoresLocalNodesDueToNaiveSyncReplicaSorting(t *testing.T) {
 
 func TestDefault_ForciblyFailsBackToPrimaryRegionDuringSecondaryFailover(t *testing.T) {
 	g := NewWithT(t)
-	ctx := context.TODO()
+	ctx := context.Background()
+
+	defer teardown()
+
+	events.SetListenersForRegionChange(func(context.Context, string) {})
 
 	// Simulate CloudNativePG operating in DR (dc-02) and natively attempting a local failover within dc-02
 	clus := buildCluster(
@@ -251,7 +263,6 @@ func TestDefault_ForciblyFailsBackToPrimaryRegionDuringSecondaryFailover(t *test
 
 	// syncNum = 2 (allows 3 total active sync replica slots)
 	internalCluster := RegisterOrUpdateCluster(webhookTestNamespace, webhookTestCluster, "4", "5", 3, 2)
-	defer DropCluster(webhookTestNamespace, webhookTestCluster)
 
 	internalCluster.RegisterOrUpdateInstance("1", "dc-01", true)  // Node 1 (dc-01) recovered and is healthy
 	internalCluster.RegisterOrUpdateInstance("4", "dc-02", false) // Node 4 (Current DR Primary) crashing

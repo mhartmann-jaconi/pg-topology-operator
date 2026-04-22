@@ -34,14 +34,14 @@ helm install pg-topology helm -n cnpg-system
 ### docker
 
 ```
-docker build . -f Dockerfile -t docker.lp.rsint.net/platform/pg-topology-operator:v0.10.0
-docker push docker.lp.rsint.net/platform/pg-topology-operator:v0.10.0
+docker build . -f Dockerfile -t docker.lp.rsint.net/platform/pg-topology-operator:v0.10.1
+docker push docker.lp.rsint.net/platform/pg-topology-operator:v0.10.1
 ```
 or
 ```
 export AD_USER=...
 export AD_PASSWORD=...
-make DOCKER_TAG=v0.10.0 docker-upload
+make DOCKER_TAG=v0.10.1 docker-upload
 ```
 
 ### helm
@@ -103,6 +103,11 @@ In addition [pprof debug endpoint](https://go.dev/wiki/Performance) can be enabl
 debug:
   enabled: true
 ```
+After port forwarding
+```
+kubectl port-forward -n cnpg-system deployment/pg-topology-operator 1234
+```
+you can access it via http://localhost:1234/debug/pprof/
 
 ## TODO
 

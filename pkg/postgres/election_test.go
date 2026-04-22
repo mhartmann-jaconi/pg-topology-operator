@@ -2,6 +2,8 @@ package postgres
 
 import (
 	"context"
+	"log/slog"
+	"os"
 	"testing"
 
 	pgapi "github.com/cloudnative-pg/cloudnative-pg/api/v1"
@@ -10,6 +12,7 @@ import (
 	"github.com/jaconi-io/ipoque-pg-webhook/pkg/events"
 	. "github.com/onsi/gomega"
 	"github.com/spf13/viper"
+	"github.com/thejerf/slogassert"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -22,10 +25,11 @@ var clus *Cluster
 func Test_changePrimaryInstances(t *testing.T) {
 	g := NewWithT(t)
 
-	defer viper.Reset()
+	defer teardown()
 
 	viper.Set(config.LogLevel, "debug")
-	config.InitLogging()
+
+	events.SetListenersForRegionChange(func(context.Context, string) {})
 
 	cluster.Store("node1", "dc-01", false)
 	cluster.Store("node2", "dc-02", true)
@@ -78,18 +82,46 @@ func Test_changePrimaryInstances(t *testing.T) {
 		WithStatusSubresource(apiCluster1, apiCluster2).
 		WithObjects(apiCluster1, apiCluster2).Build()
 
-	err := changePrimaryInstances("dc-02")
+	err := changePrimaryInstances(context.Background(), "dc-02")
 	g.Expect(err).To(BeNil())
+}
+
+func Test_changePrimaryInstances_canceledContext(t *testing.T) {
+	g := NewWithT(t)
+
+	defer teardown()
+
+	handler := slogassert.New(t, config.LevelTrace, slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{}))
+	slog.SetDefault(slog.New(handler))
+
+	// create cancelable context to pass into function
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// no clusters existing, but function should run through
+	err := changePrimaryInstances(ctx, "dc-02")
+	g.Expect(err).To(BeNil())
+	handler.AssertMessage("Starting update of 0 clusters")
+	handler.Reset()
+
+	// cancel context
+	cancel()
+
+	// context canceled, exit function without further processing
+	err = changePrimaryInstances(ctx, "dc-02")
+	g.Expect(err).To(BeNil())
+	handler.AssertMessage("Primary change function canceled")
+	handler.Reset()
 }
 
 func Test_initiateSwitchover(t *testing.T) {
 	g := NewWithT(t)
 
-	defer viper.Reset()
+	defer teardown()
 
+	ctx := context.Background()
 	viper.Set(config.LogLevel, "debug")
-	config.InitLogging()
-	events.SetListenersForRegionChange(func(ctx context.Context, s string) {})
+
+	events.SetListenersForRegionChange(func(context.Context, string) {})
 
 	cluster.Store("node1", "dc-01", false)
 	cluster.Store("node2", "dc-02", true)
@@ -142,9 +174,9 @@ func Test_initiateSwitchover(t *testing.T) {
 		WithStatusSubresource(apiCluster1, apiCluster2).
 		WithObjects(apiCluster1, apiCluster2).Build()
 
-	err := clus2.initiateSwitchover()
+	err := clus2.initiateSwitchover(ctx)
 	g.Expect(err).To(BeNil())
-	err = clus1.initiateSwitchover()
+	err = clus1.initiateSwitchover(ctx)
 	g.Expect(err).NotTo(BeNil())
 	g.Expect(err.Error()).To(ContainSubstring("no eligible target instance found to be promoted to primary"))
 }
@@ -152,9 +184,9 @@ func Test_initiateSwitchover(t *testing.T) {
 func Test_isEligibleForID(t *testing.T) {
 	g := NewWithT(t)
 
-	defer viper.Reset()
-
 	setup()
+
+	defer teardown()
 
 	inst1 := clus.RegisterOrUpdateInstance("1", "dc-01", true)
 	inst2 := clus.RegisterOrUpdateInstance("2", "dc-01", true)
@@ -199,7 +231,9 @@ func Test_isEligibleForID(t *testing.T) {
 func setup() {
 	viper.Set(config.LogLevel, "debug")
 	viper.Set(config.LabelRegion, "topology.kubernetes.io/region")
-	config.InitLogging()
+
+	events.SetListenersForRegionChange(func(context.Context, string) {})
+
 	cluster.Store("node1", "dc-01", true)
 	cluster.Store("node2", "dc-01", true)
 	cluster.Store("node3", "dc-02", false)
@@ -210,4 +244,10 @@ func setup() {
 		syncNum:   2,
 		instances: map[string]*Instance{},
 	}
+}
+
+func teardown() {
+	viper.Reset()
+	cluster.ClearState()
+	clusters = map[string]*Cluster{}
 }

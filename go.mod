@@ -5,7 +5,6 @@ go 1.25.0
 require (
 	github.com/cloudnative-pg/cloudnative-pg v1.28.1
 	github.com/go-logr/logr v1.4.3
-	github.com/maniartech/signals v1.3.1
 	github.com/onsi/gomega v1.39.1
 	github.com/prometheus/client_golang v1.23.2
 	github.com/spf13/cobra v1.10.2

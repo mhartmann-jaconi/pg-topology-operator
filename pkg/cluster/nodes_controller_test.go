@@ -3,6 +3,7 @@ package cluster
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/jaconi-io/ipoque-pg-webhook/pkg/config"
 	"github.com/jaconi-io/ipoque-pg-webhook/pkg/events"
@@ -20,6 +21,7 @@ func TestReconcile(t *testing.T) {
 
 	primaryChangeCount := 0
 	events.SetListenersForRegionChange(func(ctx context.Context, s string) { primaryChangeCount++ })
+	getChangeCount := func() int { return primaryChangeCount }
 
 	viper.Set(config.LabelLeader, "lead")
 	viper.Set(config.LabelRegion, "region")
@@ -41,7 +43,7 @@ func TestReconcile(t *testing.T) {
 
 	// reconcile all nodes and check that dc-01 is primary and all other mappings exist
 	g.Expect(GetPrimaryRegion()).To(Equal("dc-01"))
-	g.Expect(primaryChangeCount).To(Equal(1))
+	g.Eventually(getChangeCount, 20*time.Millisecond).Should(Equal(1))
 
 	// make node3 unhealthy and try to reconcile -> no change
 	node3.Spec.Taints = []corev1.Taint{{Effect: corev1.TaintEffectNoSchedule}}
@@ -49,19 +51,19 @@ func TestReconcile(t *testing.T) {
 	_, err = runReconcile(node3)
 	g.Expect(err).To(BeNil())
 	g.Expect(GetPrimaryRegion()).To(Equal("dc-01"))
-	g.Expect(primaryChangeCount).To(Equal(1))
+	g.Eventually(getChangeCount, 20*time.Millisecond).Should(Equal(1))
 
 	node4.ObjectMeta.Labels["lead"] = "yep"
 	_, err = runReconcile(node4)
 
 	// check that primary region changed
 	g.Expect(GetPrimaryRegion()).To(Equal("dc-02"))
-	g.Expect(primaryChangeCount).To(Equal(2))
+	g.Eventually(getChangeCount, 20*time.Millisecond).Should(Equal(2))
 }
 
 func runReconcile(node *corev1.Node) (reconcile.Result, error) {
 	rec := Reconciler{Client: fake.NewFakeClient(node)}
-	return rec.Reconcile(context.TODO(), reconcile.Request{NamespacedName: types.NamespacedName{Name: node.Name}})
+	return rec.Reconcile(context.Background(), reconcile.Request{NamespacedName: types.NamespacedName{Name: node.Name}})
 }
 
 func createNode(name, region string, healthy, leader bool) *corev1.Node {

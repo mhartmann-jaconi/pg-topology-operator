@@ -217,7 +217,7 @@ func runReconcileWithPod(objects ...*corev1.Pod) error {
 		}
 	}
 
-	_, err := rec.Reconcile(context.TODO(), request)
+	_, err := rec.Reconcile(context.Background(), request)
 	return err
 }
 

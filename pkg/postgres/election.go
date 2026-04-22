@@ -19,7 +19,7 @@ import (
 // based on the current leading AZ. This will loop through all existing pods of the
 // cluster and check which instance is a sync-replica and in the desired AZ. This instance
 // is then set as desired new primary on the cluster.
-func changePrimaryInstances(newLeadingZone string) error {
+func changePrimaryInstances(ctx context.Context, newLeadingZone string) error {
 	slog.Info(fmt.Sprintf("Received event for primary AZ change to %s. Updating %d clusters", newLeadingZone, len(clusters)))
 	clusterLeft := make([]*Cluster, len(clusters))
 	count := 0
@@ -38,11 +38,15 @@ func changePrimaryInstances(newLeadingZone string) error {
 			return true
 		},
 		func() error {
+			if ctx.Err() != nil {
+				slog.Debug("Primary change function canceled")
+				return nil
+			}
 			var errx error
 			clusterErrors := make([]*Cluster, 0)
 			slog.Info(fmt.Sprintf("Starting update of %d clusters", len(clusterLeft)))
 			for _, clus := range clusterLeft {
-				if err := clus.initiateSwitchover(); err != nil {
+				if err := clus.initiateSwitchover(ctx); err != nil {
 					errx = err
 					clusterErrors = append(clusterErrors, clus)
 				}
@@ -127,7 +131,7 @@ func isEligible(inst *Instance, checkIfSync bool) (eligible bool, reason string)
 func applyNewPrimary(ctx context.Context, clusterName, clusterNamespace, newPrimary string) error {
 	slog.InfoContext(ctx, fmt.Sprintf("Change cluster to have new primary instance %s", newPrimary))
 
-	return patchClusterWithRetry(clusterNamespace, clusterName, func(cluster *pgapi.Cluster) (*pgapi.Cluster, bool) {
+	return patchClusterWithRetry(ctx, clusterNamespace, clusterName, func(cluster *pgapi.Cluster) (*pgapi.Cluster, bool) {
 		if cluster.Status.TargetPrimary == newPrimary {
 			// already set, nothing to do here
 			slog.DebugContext(ctx, fmt.Sprintf("Desired primary %s already set", newPrimary))
@@ -168,8 +172,8 @@ func getCurrentTimestamp() string {
 }
 
 func init() {
-	// call changePrimaryInstances in case the primary AZ changes
+	// call changePrimaryInstances in case the primary region changes
 	events.AddListenerForRegionChange(func(ctx context.Context, s string) {
-		changePrimaryInstances(s)
+		changePrimaryInstances(ctx, s)
 	})
 }
