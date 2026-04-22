@@ -45,6 +45,7 @@ func (defaulter) Default(ctx context.Context, obj runtime.Object) error {
 
 	clusterName := postgres.GetClusterName(pod.Labels)
 	ctx = config.EnrichContext(ctx, clusterName)
+
 	if err := applyNodeSelector(ctx, pod); err != nil {
 		slog.ErrorContext(ctx, "failed to mutate pod", "err", err)
 		return err
@@ -52,17 +53,29 @@ func (defaulter) Default(ctx context.Context, obj runtime.Object) error {
 	return nil
 }
 
-// applyNodeSelector attaches a node selector to the first occurrence of a primary pod
-// of the PG cluster. All other topology constraints are set by K8s mechanics itself.
+// applyNodeSelector attaches a region-based node selector to
+//  1. the initial setup job for PG instance 1
+//  2. all "real" PG pods, which are not instance setup related
+//
+// The region to set is for the initial setup pod the current primary region.
+// For all other PG instance it is the region from their own setup job.
 func applyNodeSelector(ctx context.Context, pod *corev1.Pod) error {
 	clusterName := postgres.GetClusterName(pod.Labels)
 	clus := postgres.GetCluster(pod.Namespace, clusterName)
 	if clus == nil {
 		return fmt.Errorf("cluster %s not found", clusterName)
 	}
-	if clus.GetCurrentPrimaryInstanceId() != "" {
-		slog.Log(ctx, config.LevelTrace, fmt.Sprintf("Ignore pod %s for webhook, as a primary instance is already stored", pod.Name))
-		// already processed
+	if len(pod.Spec.NodeSelector) > 0 {
+		// never touch existing node selectors
+		return nil
+	}
+	if !isSetupPod(pod) {
+		inst := clus.GetInstanceByID(postgres.GetInstanceId(pod.Labels))
+		if inst == nil {
+			slog.WarnContext(ctx, fmt.Sprintf("Instance %s not registered yet", pod.Name))
+			return nil
+		}
+		setSelector(ctx, pod, inst.GetRegion())
 		return nil
 	}
 	if !isInitialPrimary(pod) {
@@ -71,24 +84,34 @@ func applyNodeSelector(ctx context.Context, pod *corev1.Pod) error {
 		return nil
 	}
 
-	labelRegion := viper.GetString(config.LabelRegion)
 	primaryRegion := cluster.GetPrimaryRegion()
 	if primaryRegion == "" {
 		return fmt.Errorf("primary region not set yet")
 	}
 
-	slog.InfoContext(ctx, fmt.Sprintf("Applying selector for region %s on pod %s", primaryRegion, pod.Name))
-
-	pod.Spec.NodeSelector = map[string]string{
-		labelRegion: primaryRegion,
-	}
+	setSelector(ctx, pod, primaryRegion)
 	return nil
+}
+
+func setSelector(ctx context.Context, pod *corev1.Pod, region string) {
+	labelRegion := viper.GetString(config.LabelRegion)
+	if pod.Spec.NodeSelector[labelRegion] == region {
+		return
+	}
+	slog.InfoContext(ctx, fmt.Sprintf("Applying selector for region %s on pod %s", region, pod.Name))
+	pod.Spec.NodeSelector = map[string]string{
+		labelRegion: region,
+	}
+}
+
+func isSetupPod(pod *corev1.Pod) bool {
+	return pod.Labels[postgres.LabelPGJobRole] != ""
 }
 
 func isInitialPrimary(pod *corev1.Pod) bool {
 	if postgres.IsPrimary(pod.Labels) {
 		return true
 	}
-	// on initial setup, first PG pod does not have primary label attached, so we need to check the instance number
+	// on initial setup, first PG pod might not have primary label attached, so we need to check the instance number
 	return postgres.GetInstanceId(pod.Labels) == "1"
 }

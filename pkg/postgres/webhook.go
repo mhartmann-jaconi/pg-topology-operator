@@ -36,7 +36,7 @@ func (defaulter) Default(ctx context.Context, obj runtime.Object) error {
 	currentPrimary := cluster.Status.CurrentPrimary
 	desiredPrimary := cluster.Status.TargetPrimary
 	if currentPrimary == "" {
-		slog.DebugContext(ctx, "Current primary not set yet for cluster")
+		slog.Log(ctx, config.LevelTrace, "Current primary not set yet for cluster")
 		return nil
 	}
 	if currentPrimary == desiredPrimary {
@@ -49,10 +49,6 @@ func (defaulter) Default(ctx context.Context, obj runtime.Object) error {
 		return nil
 	}
 	inst := clus.GetInstanceByName(desiredPrimary)
-	if inst == nil {
-		slog.ErrorContext(ctx, fmt.Sprintf("Instance %s not registered for cluster", desiredPrimary))
-		return nil
-	}
 	if eligible, reason := isEligible(inst, false); eligible {
 		slog.Log(ctx, config.LevelTrace, fmt.Sprintf("Desired primary %s is already eligible primary", desiredPrimary))
 		return nil

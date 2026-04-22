@@ -88,6 +88,10 @@ func findNewEligibleTargetInstance(ctx context.Context, clus *Cluster) string {
 	// for being promoted to new primary
 	for _, inst := range clus.GetInstances() {
 		slog.DebugContext(ctx, fmt.Sprintf("Checking instance %s...", inst.name))
+		if inst.instanceId == clus.primary {
+			slog.DebugContext(ctx, fmt.Sprintf("Skip instance %s as it is the current primary", inst.name))
+			continue
+		}
 		if is, reason := isEligible(inst, true); is {
 			slog.InfoContext(ctx, fmt.Sprintf("Found %s to get promoted to new primary instance", inst.name))
 			return inst.name

@@ -23,10 +23,6 @@ type Reconciler struct {
 	client.Client
 }
 
-func (r *Reconciler) GetObjectType() string {
-	return "Cluster"
-}
-
 var _ reconcile.Reconciler = &Reconciler{}
 
 // Reconcile gets notified of all changes for a PG cluster and put's its information
@@ -37,7 +33,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// cluster was deleted
-			dropCluster(cluster.Namespace, cluster.Name)
+			DropCluster(cluster.Namespace, cluster.Name)
 			return reconcile.Result{}, nil
 		}
 		ctx = config.EnrichContext(ctx, request.Name)
@@ -47,7 +43,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 
 	if cluster.DeletionTimestamp != nil {
 		// cluster is in deletion
-		dropCluster(cluster.Namespace, cluster.Name)
+		DropCluster(cluster.Namespace, cluster.Name)
 		return reconcile.Result{}, nil
 	}
 

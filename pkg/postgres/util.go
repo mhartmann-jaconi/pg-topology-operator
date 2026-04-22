@@ -9,6 +9,7 @@ const (
 	LabelPGInstanceName string = "cnpg.io/instanceName"
 	LabelPGClusterName  string = "cnpg.io/cluster"
 	LabelPGJobRole      string = "cnpg.io/jobRole"
+	LabelPGPodRole      string = "cnpg.io/podRole"
 	LabelPGRole         string = "role"
 
 	PGRolePrimary string = "primary"
@@ -20,6 +21,7 @@ const (
 // primary instance.
 func IsPrimary(labels map[string]string) bool {
 	return labels[LabelPGInstanceRole] == PGRolePrimary ||
+		labels[LabelPGRole] == PGRolePrimary ||
 		labels[LabelPGJobRole] == PGRoleInitDB
 }
 

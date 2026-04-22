@@ -21,10 +21,6 @@ type Reconciler struct {
 	client.Client
 }
 
-func (r *Reconciler) GetObjectType() string {
-	return "Node"
-}
-
 var _ reconcile.Reconciler = &Reconciler{}
 
 // Reconcile will store information about existing zones, regions and which

@@ -72,3 +72,8 @@ func GetPrimaryRegion() string {
 	}
 	return ""
 }
+
+func ClearState() {
+	nodes = map[string]string{}
+	regions = map[string]region{}
+}

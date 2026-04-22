@@ -68,7 +68,7 @@ func RegisterOrUpdateCluster(clusterNamespace, clusterName, primaryInstanceId, d
 	return clusters[key]
 }
 
-func dropCluster(clusterNamespace, clusterName string) {
+func DropCluster(clusterNamespace, clusterName string) {
 	if _, ok := clusters[clusterKey(clusterNamespace, clusterName)]; !ok {
 		ctx := config.EnrichContext(context.TODO(), clusterName)
 		slog.InfoContext(ctx, "Remove cluster from internal state")
@@ -129,7 +129,7 @@ func (clus *Cluster) RegisterOrUpdateInstance(instanceId, region string, isHealt
 		inst.region = region
 		return inst
 	} else {
-		slog.InfoContext(ctx, fmt.Sprintf("Register new instance %s", instanceId))
+		slog.InfoContext(ctx, fmt.Sprintf("Register new instance %s in region %s", instanceId, region))
 	}
 	inst := &Instance{
 		name:       clus.name + "-" + instanceId,
