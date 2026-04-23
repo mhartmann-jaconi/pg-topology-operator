@@ -8,7 +8,7 @@ import (
 	"context"
 	"log/slog"
 
-	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
+	"github.com/jaconi-io/ipoque-pg-webhook/pkg/config"
 )
 
 // RegionChangeListener function gets a context and the name of the new primary
@@ -74,6 +74,6 @@ func initRegionChangeEvents() {
 }
 
 func init() {
-	parentContext = signals.SetupSignalHandler()
+	parentContext = config.GetParentContext()
 	initRegionChangeEvents()
 }

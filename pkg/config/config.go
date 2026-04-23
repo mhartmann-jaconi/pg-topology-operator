@@ -2,11 +2,14 @@
 package config
 
 import (
+	"context"
 	"strings"
+	"sync"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
+	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
 )
 
 const (
@@ -30,6 +33,9 @@ const (
 	LogJson  = "log.json"
 	LogLevel = "log.level"
 )
+
+var mutex *sync.Mutex = new(sync.Mutex)
+var parentContext context.Context
 
 func Bootstrap(rootCmd *cobra.Command) {
 	rootCmd.Flags().String(LabelRegion, "topology.kubernetes.io/region", "node label for region")
@@ -66,6 +72,15 @@ func unmarkRequired(cmd *cobra.Command) func() {
 			}
 		})
 	}
+}
+
+func GetParentContext() context.Context {
+	mutex.Lock()
+	defer mutex.Unlock()
+	if parentContext == nil {
+		parentContext = signals.SetupSignalHandler()
+	}
+	return parentContext
 }
 
 func initConfig() {

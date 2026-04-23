@@ -32,7 +32,6 @@ import (
 	"k8s.io/client-go/util/retry"
 	clientConfig "sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
-	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
 	ctrlwebhook "sigs.k8s.io/controller-runtime/pkg/webhook"
 )
 
@@ -121,7 +120,7 @@ func main() {
 			pods.InitController(mgr)
 			postgres.InitController(mgr)
 
-			return mgr.Start(signals.SetupSignalHandler())
+			return mgr.Start(config.GetParentContext())
 		},
 	}
 	config.Bootstrap(rootCmd)
