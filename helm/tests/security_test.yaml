@@ -1,0 +1,61 @@
+# Security assertions for the pg-topology-operator Helm chart.
+#
+# These tests validate that default values and rendered templates enforce
+# security best practices. Tests that fail against the current defaults
+# are expected — they serve as TDD anchors for hardening the chart.
+#
+# Run with: make helm-test (from operator/)
+
+suite: Security Configuration Tests
+
+tests:
+  # SEC-09: The default securityContext is empty ({}), which means the container
+  # runs as root with full capabilities. The fix is to set restrictive defaults
+  # in values.yaml: runAsNonRoot, drop ALL capabilities, no privilege escalation.
+  - it: SecurityContext should enforce non-root by default
+    template: templates/deployment.yaml
+    asserts:
+      - isSubset:
+          path: spec.template.spec.containers[0].securityContext
+          content:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            runAsNonRoot: true
+
+  # SEC-07: The ClusterRole grants unrestricted access to ALL
+  # mutatingwebhookconfigurations in the cluster. The operator only needs
+  # access to its own specific webhook configurations. The fix is to add
+  # a resourceNames constraint to scope the rule.
+  - it: ClusterRole should scope webhook access with resourceNames
+    template: templates/clusterrole.yaml
+    asserts:
+      - contains:
+          path: rules
+          content:
+            apiGroups:
+              - "admissionregistration.k8s.io"
+            resources:
+              - mutatingwebhookconfigurations
+            resourceNames:
+              - postgres-cluster-update
+              - postgres-pod-update
+            verbs:
+              - list
+              - get
+              - watch
+              - patch
+              - update
+
+  # SEC-08: Regression guard — debug.enabled defaults to false, which is correct.
+  # The debug endpoint exposes Go runtime internals (goroutines, heap profiles)
+  # via pprof. This test ensures nobody accidentally enables it in values.yaml.
+  - it: Debug should be disabled by default
+    template: templates/deployment.yaml
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].ports
+          content:
+            name: debug
+          any: true

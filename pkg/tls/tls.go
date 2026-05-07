@@ -16,10 +16,9 @@ import (
 	"github.com/spf13/viper"
 )
 
-const CertDir = "/etc/webhook/certs/"
-const CertFile = CertDir + "tls.crt"
-const KeyFile = CertDir + "tls.key"
-const caFile = CertDir + "ca.pem"
+const CertFile = "tls.crt"
+const KeyFile = "tls.key"
+const caFile = "ca.pem"
 
 // Generate creates a certificate and key for TLS communication and stores them in [CertDir].
 // This certificate will be signed by a CA, which is retrieved afterwards.
@@ -27,13 +26,16 @@ const caFile = CertDir + "ca.pem"
 // Inspired by https://www.velotio.com/engineering-blog/managing-tls-certificate-for-kubernetes-admission-webhook
 func Generate() (*bytes.Buffer, error) {
 
-	if _, err := os.Stat(caFile); err == nil {
+	certDir := CertDir()
+	if _, err := os.Stat(certDir + caFile); err == nil {
 		// certificates already generated
-		ca, err := os.ReadFile(caFile)
+		ca, err := os.ReadFile(certDir + caFile)
 		if err != nil {
 			return nil, err
 		}
 		return bytes.NewBuffer(ca), nil
+	} else {
+
 	}
 
 	organization := viper.GetString(config.CertificateOrganization)
@@ -57,14 +59,14 @@ func Generate() (*bytes.Buffer, error) {
 	slog.Debug("Generating CA private key")
 	caPrivKey, err := rsa.GenerateKey(cryptorand.Reader, 4096)
 	if err != nil {
-		fmt.Println(err)
+		return nil, err
 	}
 
 	// Self signed CA certificate
 	slog.Debug("Generating self-signed certificate")
 	caBytes, err := x509.CreateCertificate(cryptorand.Reader, ca, ca, &caPrivKey.PublicKey, caPrivKey)
 	if err != nil {
-		fmt.Println(err)
+		return nil, err
 	}
 
 	// PEM encode CA cert
@@ -95,14 +97,14 @@ func Generate() (*bytes.Buffer, error) {
 	slog.Debug("Generating server private key")
 	serverPrivKey, err := rsa.GenerateKey(cryptorand.Reader, 4096)
 	if err != nil {
-		fmt.Println(err)
+		return nil, err
 	}
 
 	// sign the server cert
 	slog.Debug("Signing server cert")
 	serverCertBytes, err := x509.CreateCertificate(cryptorand.Reader, cert, ca, &serverPrivKey.PublicKey, caPrivKey)
 	if err != nil {
-		fmt.Println(err)
+		return nil, err
 	}
 
 	// PEM encode the  server cert and key
@@ -120,27 +122,35 @@ func Generate() (*bytes.Buffer, error) {
 		Bytes: x509.MarshalPKCS1PrivateKey(serverPrivKey),
 	})
 
-	slog.Info(fmt.Sprintf("Writing certificates to directory %s", CertDir))
+	slog.Info(fmt.Sprintf("Writing certificates to directory %s", certDir))
 
-	err = writeFile(CertFile, serverCertPEM)
+	err = writeFile(certDir+CertFile, serverCertPEM)
 	if err != nil {
-		slog.Error(err.Error())
 		return nil, err
 	}
 
-	err = writeFile(KeyFile, serverPrivKeyPEM)
+	err = writeFile(certDir+KeyFile, serverPrivKeyPEM)
 	if err != nil {
-		slog.Error(err.Error())
 		return nil, err
 	}
 
-	err = writeFile(caFile, caPEM)
+	err = writeFile(certDir+caFile, caPEM)
 	if err != nil {
-		slog.Error(err.Error())
 		return nil, err
 	}
 
 	return caPEM, nil
+}
+
+func CertDir() string {
+	certDir := viper.GetString(config.CertificateDirectory)
+	if certDir == "" {
+		panic("Missing certificate directory configuration")
+	}
+	if certDir[len(certDir)-1] != os.PathSeparator {
+		certDir = certDir + string(os.PathSeparator)
+	}
+	return certDir
 }
 
 func dnsNames() []string {
@@ -154,7 +164,11 @@ func dnsNames() []string {
 }
 
 func writeFile(filepath string, sCert *bytes.Buffer) error {
-	f, err := os.Create(filepath)
+	f, err := os.OpenFile(
+		filepath,
+		os.O_CREATE|os.O_WRONLY,
+		0600,
+	)
 	if err != nil {
 		return err
 	}

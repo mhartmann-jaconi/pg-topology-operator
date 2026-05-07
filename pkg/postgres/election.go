@@ -20,11 +20,12 @@ import (
 // cluster and check which instance is a sync-replica and in the desired AZ. This instance
 // is then set as desired new primary on the cluster.
 func changePrimaryInstances(ctx context.Context, newLeadingZone string) error {
-	slog.Info(fmt.Sprintf("Received event for primary AZ change to %s. Updating %d clusters", newLeadingZone, len(clusters)))
-	clusterLeft := make([]*Cluster, len(clusters))
+	existingClusters := GetClusters()
+	slog.Info(fmt.Sprintf("Received event for primary AZ change to %s. Updating %d clusters", newLeadingZone, len(existingClusters)))
+	clustersLeft := make([]PGCluster, len(existingClusters))
 	count := 0
-	for _, clus := range clusters {
-		clusterLeft[count] = clus
+	for _, clus := range existingClusters {
+		clustersLeft[count] = clus
 		count++
 	}
 	return retry.OnError(
@@ -43,17 +44,18 @@ func changePrimaryInstances(ctx context.Context, newLeadingZone string) error {
 				return nil
 			}
 			var errx error
-			clusterErrors := make([]*Cluster, 0)
-			slog.Info(fmt.Sprintf("Starting update of %d clusters", len(clusterLeft)))
-			for _, clus := range clusterLeft {
+			clustersError := make([]PGCluster, 0)
+			slog.Info(fmt.Sprintf("Starting update of %d clusters", len(clustersLeft)))
+			for i := range clustersLeft {
+				clus := clustersLeft[i]
 				if err := clus.initiateSwitchover(ctx); err != nil {
 					errx = err
-					clusterErrors = append(clusterErrors, clus)
+					clustersError = append(clustersError, clus)
 				}
 			}
-			if len(clusterErrors) > 0 {
-				slog.Warn(fmt.Sprintf("Errors occurred for switchover in %d clusters. Retrying...", len(clusterErrors)))
-				clusterLeft = clusterErrors
+			if len(clustersError) > 0 {
+				slog.Warn(fmt.Sprintf("Errors occurred for switchover in %d clusters. Retrying...", len(clustersError)))
+				clustersLeft = clustersError
 				return errx
 			}
 			return nil
@@ -66,33 +68,34 @@ func changePrimaryInstances(ctx context.Context, newLeadingZone string) error {
 // eligible to become the new primary. If not, this will try to find another instance
 // to get promoted and set this as desired primary.
 // If no instance could be found, this will return an error.
-func initiateSwitchover(ctx context.Context, clus *Cluster) error {
+func initiateSwitchover(ctx context.Context, clus PGCluster) error {
 	if alreadyChanged, _ := isEligible(clus.GetPrimaryInstance(), true); alreadyChanged {
 		slog.DebugContext(ctx, "Eligible target primary already set on cluster")
 		return nil
-	} else if clus.desiredPrimary == "" {
+	} else if clus.GetDesiredPrimaryInstanceId() == "" {
 		slog.DebugContext(ctx, "Desired primary not yet existing for cluster")
 		return nil
 	}
 
-	slog.InfoContext(ctx, fmt.Sprintf("Changing primary instance for cluster. Current: %s, Desired: %s", clus.primary, clus.desiredPrimary))
+	slog.InfoContext(ctx, fmt.Sprintf("Changing primary instance for cluster. Current: %s, Desired: %s",
+		clus.GetCurrentPrimaryInstanceId(), clus.GetDesiredPrimaryInstanceId()))
 	newInstance := findNewEligibleTargetInstance(ctx, clus)
 	if newInstance == "" {
 		return fmt.Errorf("no eligible target instance found to be promoted to primary")
 	}
-	return applyNewPrimary(ctx, clus.name, clus.namespace, newInstance)
+	return applyNewPrimary(ctx, clus.GetName(), clus.GetNamespace(), newInstance)
 }
 
 // findNewEligibleTargetInstance will return the instance-name of the instance,
 // which should currently become the primary instance.
 // If no such instance could be found, an empty string is retrieved.
-func findNewEligibleTargetInstance(ctx context.Context, clus *Cluster) string {
+func findNewEligibleTargetInstance(ctx context.Context, clus PGCluster) string {
 
 	// iterate through pods (healthy instances) and decide, which one is eligible
 	// for being promoted to new primary
 	for _, inst := range clus.GetInstances() {
 		slog.DebugContext(ctx, fmt.Sprintf("Checking instance %s...", inst.name))
-		if inst.instanceId == clus.primary {
+		if inst.instanceId == clus.GetCurrentPrimaryInstanceId() {
 			slog.DebugContext(ctx, fmt.Sprintf("Skip instance %s as it is the current primary", inst.name))
 			continue
 		}

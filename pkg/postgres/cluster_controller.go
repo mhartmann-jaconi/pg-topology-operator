@@ -33,7 +33,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// cluster was deleted
-			DropCluster(cluster.Namespace, cluster.Name)
+			DropCluster(request.Namespace, request.Name)
 			return reconcile.Result{}, nil
 		}
 		ctx = config.EnrichContext(ctx, request.Name)

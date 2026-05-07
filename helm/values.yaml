@@ -60,13 +60,12 @@ resources:
     memory: 100Mi
 
 ## @param securityContext The pod's security context.
-securityContext: {}
-# capabilities:
-#   drop:
-#   - ALL
-# readOnlyRootFilesystem: true
-# runAsNonRoot: true
-# runAsUser: 1000
+securityContext:
+  capabilities:
+    drop:
+      - ALL
+  runAsNonRoot: true
+  allowPrivilegeEscalation: false
 
 image:
   ## @param image.repository The controller image.
@@ -81,6 +80,9 @@ image:
 webhook:
   ## @param webhook.organization Name of the organization, used for webhook certificates
   organization: "ipoque.com"
+  certificate:
+    ## @param webhook.certificate.directory Ephemeral storage path to store generated webhook certificates in
+    directory: "/etc/webhook/certs/"
 
 ## @section Topology configuration parameters
 topology:

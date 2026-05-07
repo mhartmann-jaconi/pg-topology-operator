@@ -14,6 +14,7 @@ import (
 
 const (
 	LabelRegion = "topology.label_region"
+	LabelZone   = "topology.label_zone"
 	LabelLeader = "topology.label_leader"
 
 	PodName = "pod.name"
@@ -23,9 +24,9 @@ const (
 	ServiceNamespace = "service.namespace"
 
 	CertificateOrganization = "certificate.organization"
+	CertificateDirectory    = "certificate.directory"
 
-	MetricsEnabled = "metrics.enabled"
-	MetricsPort    = "metrics.port"
+	MetricsAddr = "metrics.address"
 
 	DebugEnabled = "debug.enabled"
 	DebugPort    = "debug.port"
@@ -47,12 +48,12 @@ func Bootstrap(rootCmd *cobra.Command) {
 	rootCmd.Flags().String(ServiceName, "", "name of the webhook implementation K8s service")
 	rootCmd.Flags().String(ServiceNamespace, "", "namespace of the webhook implementation K8s service")
 
-	rootCmd.Flags().Bool(MetricsEnabled, true, "expose prometheus metrucs")
-	rootCmd.Flags().Int(MetricsPort, 9000, "port to expose prometheus metrics on")
+	rootCmd.Flags().String(MetricsAddr, ":9000", "address to expose prometheus metrics on, 0 to disable")
 	rootCmd.Flags().Bool(DebugEnabled, false, "expose golang runtime debug information")
 	rootCmd.Flags().Int(DebugPort, 1234, "port to expose debug information on")
 
 	rootCmd.Flags().String(CertificateOrganization, "", "name of organization for webhook certificates")
+	rootCmd.Flags().String(CertificateDirectory, "/etc/webhook/certs/", "directory to store generated certificates in")
 
 	rootCmd.Flags().Bool(LogJson, false, "output logs in JSON format")
 	rootCmd.Flags().String(LogLevel, "info", "log level")
@@ -84,13 +85,14 @@ func GetParentContext() context.Context {
 }
 
 func initConfig() {
-	// Allow flags containing dashes / dots to be set by environment variables which use underscores instead of dashes /
-	// dots.
 	viper.SetConfigFile("/config/application.yaml")
 	err := viper.ReadInConfig()
 	if err != nil {
 		panic(err)
 	}
+
+	// Allow flags containing dashes / dots to be set by environment variables which use underscores instead of dashes /
+	// dots.
 	replacer := strings.NewReplacer("-", "_", ".", "_")
 	viper.SetEnvKeyReplacer(replacer)
 }

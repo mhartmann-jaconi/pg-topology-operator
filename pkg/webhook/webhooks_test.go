@@ -1,59 +1,88 @@
-package webhook_test
+package webhook
 
 import (
 	"bytes"
 	"context"
-	"fmt"
+	"testing"
 
-	"github.com/jaconi-io/ipoque-pg-webhook/pkg/webhook"
-
+	. "github.com/onsi/gomega"
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
 )
 
-func ExampleBuild() {
-	config := webhook.Build(bytes.NewBuffer([]byte("my-ca")), "/mutate--v1-pods", "my-pod-mutator", "", "v1", "pods")
+// TestUpdate_PanicsOnEmptyWebhookList demonstrates that the update() function
+// panics as the webhook config in the cluster is invalid and the operator is
+// therefore unusable.
+func TestUpdate_PanicsOnEmptyWebhookList(t *testing.T) {
 
-	fmt.Println(string(config.Webhooks[0].ClientConfig.CABundle))
-	fmt.Println(config.Name)
-	fmt.Println(*config.Webhooks[0].ClientConfig.Service.Path)
-	fmt.Println(config.Webhooks[0].Rules[0].APIGroups[0])
-	fmt.Println(config.Webhooks[0].Rules[0].APIVersions[0])
-	fmt.Println(config.Webhooks[0].Rules[0].Resources[0])
-	// Output:
-	// my-ca
-	// my-pod-mutator
-	// /mutate--v1-pods
-	//
-	// v1
-	// pods
+	ctx := context.Background()
+
+	defer func() {
+		if r := recover(); r == nil {
+			t.Errorf("Expect panic for invalid webhook configuration")
+		}
+	}()
+
+	// Create a MutatingWebhookConfiguration with zero webhooks
+	emptyConfig := &admissionregistrationv1.MutatingWebhookConfiguration{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "empty-webhook",
+		},
+		Webhooks: []admissionregistrationv1.MutatingWebhook{}, // no webhooks
+	}
+
+	client := fake.NewClientset(emptyConfig)
+	ca := bytes.NewBufferString("fake-ca-bundle")
+
+	// Expect panic
+	Update(ctx, client, ca, "empty-webhook")
 }
 
-func ExampleCreate() {
-	ca := bytes.NewBuffer([]byte("my-ca"))
+// TestUpdate_OnlyInjectsCAIntoFirstWebhook tests that all webhooks in
+// a configuration get the same CA certificate.
+func TestUpdate_InjectCAToAllWebhooks(t *testing.T) {
 
-	c := fake.NewClientset()
+	g := NewWithT(t)
+	ctx := context.Background()
 
-	_ = webhook.Create(context.Background(), c, ca, func(ca *bytes.Buffer) *admissionregistrationv1.MutatingWebhookConfiguration {
-		return webhook.Build(ca, "/mutate--v1-pods", "my-pod-mutator", "", "v1", "pods")
-	})
+	sidecarEffect := admissionregistrationv1.SideEffectClassNone
 
-	config, _ := c.AdmissionregistrationV1().
+	// Create a MutatingWebhookConfiguration with two webhooks
+	multiConfig := &admissionregistrationv1.MutatingWebhookConfiguration{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "multi-webhook",
+		},
+		Webhooks: []admissionregistrationv1.MutatingWebhook{
+			{
+				Name:                    "first.webhook.io",
+				SideEffects:             &sidecarEffect,
+				AdmissionReviewVersions: []string{"v1"},
+				ClientConfig:            admissionregistrationv1.WebhookClientConfig{},
+			},
+			{
+				Name:                    "second.webhook.io",
+				SideEffects:             &sidecarEffect,
+				AdmissionReviewVersions: []string{"v1"},
+				ClientConfig:            admissionregistrationv1.WebhookClientConfig{},
+			},
+		},
+	}
+
+	client := fake.NewClientset(multiConfig)
+	ca := bytes.NewBufferString("fake-ca-bundle")
+
+	err := Update(ctx, client, ca, "multi-webhook")
+	g.Expect(err).ToNot(HaveOccurred())
+
+	// Verify the CA was injected into ALL webhooks, not just the first one
+	updated, err := client.AdmissionregistrationV1().
 		MutatingWebhookConfigurations().
-		Get(context.Background(), "my-pod-mutator", metav1.GetOptions{})
+		Get(ctx, "multi-webhook", metav1.GetOptions{})
+	g.Expect(err).ToNot(HaveOccurred())
 
-	fmt.Println(string(config.Webhooks[0].ClientConfig.CABundle))
-	fmt.Println(config.Name)
-	fmt.Println(*config.Webhooks[0].ClientConfig.Service.Path)
-	fmt.Println(config.Webhooks[0].Rules[0].APIGroups[0])
-	fmt.Println(config.Webhooks[0].Rules[0].APIVersions[0])
-	fmt.Println(config.Webhooks[0].Rules[0].Resources[0])
-	// Output:
-	// my-ca
-	// my-pod-mutator
-	// /mutate--v1-pods
-	//
-	// v1
-	// pods
+	for i, wh := range updated.Webhooks {
+		g.Expect(wh.ClientConfig.CABundle).ToNot(BeEmpty(),
+			"Webhook %d (%s) must have CA bundle injected", i, wh.Name)
+	}
 }

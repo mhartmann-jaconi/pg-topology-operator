@@ -10,15 +10,16 @@ data:
     pod:
       port: {{ .Values.ports.tls }}
     metrics:
-      enabled: {{ .Values.metrics.enabled }}
-      port: {{ .Values.ports.metrics }}
+      address: "{{ if .Values.metrics.enabled }}:{{ .Values.ports.metrics }}{{ else }}0{{ end }}"
     debug:
       enabled: {{ .Values.debug.enabled }}
       port: {{ .Values.ports.debug }}
     certificate:
       organization: {{ .Values.webhook.organization }}
+      directory: {{ .Values.webhook.certificate.directory }}
     topology:
       label_region: {{ .Values.topology.labels.region }}
+      label_zone: {{ .Values.topology.labels.zone }}
       label_leader: {{ .Values.topology.labels.leader }}
     log:
       level: {{ .Values.logging.level }}

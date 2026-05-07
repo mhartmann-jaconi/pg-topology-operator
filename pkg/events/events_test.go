@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -13,6 +15,7 @@ import (
 )
 
 var stateMap = make(map[string]string)
+var testLock = sync.RWMutex{}
 
 func TestPrimaryRegionChanged_preventParallelRuns(t *testing.T) {
 	g := NewWithT(t)
@@ -23,8 +26,16 @@ func TestPrimaryRegionChanged_preventParallelRuns(t *testing.T) {
 	SetListenersForRegionChange(functionWithRetry)
 	defer SetListenersForRegionChange()
 
-	getRunForeverState := func() string { return stateMap["run_forever"] }
-	getStopImmediatelyState := func() string { return stateMap["stop_immediately"] }
+	getRunForeverState := func() string {
+		testLock.Lock()
+		defer testLock.Unlock()
+		return stateMap["run_forever"]
+	}
+	getStopImmediatelyState := func() string {
+		testLock.Lock()
+		defer testLock.Unlock()
+		return stateMap["stop_immediately"]
+	}
 
 	// emit event and start a listener which will run forever
 	PrimaryRegionChanged("run_forever")
@@ -49,7 +60,7 @@ func TestPrimaryRegionChanged_preventParallelRuns(t *testing.T) {
 // It will stop with state 'canceled' if the context was canceled.
 // It will keep running and also write state 'running' in any other cases.
 func functionWithRetry(ctx context.Context, value string) {
-	stateMap[value] = "started"
+	mapWrite(value, "started")
 	retry.OnError(
 		wait.Backoff{
 			Duration: 10 * time.Millisecond,
@@ -63,15 +74,60 @@ func functionWithRetry(ctx context.Context, value string) {
 		func() error {
 			if ctx.Err() != nil {
 				slog.Debug("Primary change function canceled")
-				stateMap[value] = "canceled"
+				mapWrite(value, "canceled")
 				return nil
 			}
 			if value == "stop_immediately" {
-				stateMap[value] = "finished"
+				mapWrite(value, "finished")
 				return nil
 			}
-			stateMap[value] = "running"
+			mapWrite(value, "running")
 			return fmt.Errorf("this will always return an error")
 		},
 	)
+}
+
+func mapWrite(key, value string) {
+	testLock.Lock()
+	defer testLock.Unlock()
+	stateMap[key] = value
+}
+
+// TestPrimaryRegionChanged_subscriberPersistsUntilUnsubscribed validates
+// that event listeners stay in the internal list until they are removed.
+func TestPrimaryRegionChanged_subscriberPersistsUntilUnsubscribed(t *testing.T) {
+	g := NewWithT(t)
+
+	// Step 1: Caller-A registers a counter listener and fires an event.
+	counterA := atomic.Int32{}
+	SetListenersForRegionChange(func(ctx context.Context, s string) {
+		counterA.Add(1)
+	})
+
+	PrimaryRegionChanged("event-from-A")
+	getCounterA := func() int { return int(counterA.Load()) }
+	g.Eventually(getCounterA, 50*time.Millisecond).Should(Equal(1))
+
+	// Step 2: Caller-B adds its own counter via AddListenerForRegionChange,
+	// without knowing that listener-A is still registered (no cleanup happened).
+	counterB := atomic.Int32{}
+	AddListenerForRegionChange(func(ctx context.Context, s string) {
+		counterB.Add(1)
+	})
+
+	// Step 3: Caller-B fires its own event.
+	PrimaryRegionChanged("event-from-B")
+	getCounterB := func() int { return int(counterB.Load()) }
+	g.Eventually(getCounterB, 50*time.Millisecond).Should(Equal(1))
+
+	// Step 4: Verify the stale listener leaked.
+	// counterA is now 2 — it received "event-from-B" even though caller-A
+	// is no longer active.
+	valueA := getCounterA()
+	g.Expect(valueA).To(Equal(2), "Stale listener-A received event-from-B")
+	t.Logf("counterA: %d (expected 1 if properly cleaned up, got 2 — stale listener active)", valueA)
+	t.Logf("counterB: %d (correct)", getCounterB())
+
+	// Cleanup
+	SetListenersForRegionChange()
 }

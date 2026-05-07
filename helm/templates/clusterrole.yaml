@@ -21,17 +21,20 @@ rules:
       - watch
       - patch
       - update
+      - delete
   - apiGroups:
       - "admissionregistration.k8s.io"
     resources:
       - mutatingwebhookconfigurations
+    resourceNames:
+      - postgres-cluster-update
+      - postgres-pod-update
     verbs:
       - list
       - get
       - watch
       - patch
       - update
-      - create
   - apiGroups:
       - "postgresql.cnpg.io"
     resources:

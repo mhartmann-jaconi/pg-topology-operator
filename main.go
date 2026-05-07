@@ -16,9 +16,6 @@ import (
 	"github.com/jaconi-io/ipoque-pg-webhook/pkg/pods"
 	"github.com/jaconi-io/ipoque-pg-webhook/pkg/postgres"
 	"github.com/jaconi-io/ipoque-pg-webhook/pkg/webhook"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/collectors"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	pgapi "github.com/cloudnative-pg/cloudnative-pg/api/v1"
 	pgtls "github.com/jaconi-io/ipoque-pg-webhook/pkg/tls"
@@ -26,14 +23,26 @@ import (
 	"github.com/spf13/viper"
 
 	"k8s.io/apimachinery/pkg/runtime"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/util/retry"
-	clientConfig "sigs.k8s.io/controller-runtime/pkg/client/config"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	ctrlwebhook "sigs.k8s.io/controller-runtime/pkg/webhook"
 )
+
+var scheme = runtime.NewScheme()
+
+func init() {
+	// CNPG API objects.
+	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+
+	// Standard Kubernetes objects.
+	utilruntime.Must(pgapi.AddToScheme(scheme))
+}
 
 func main() {
 	rootCmd := &cobra.Command{
@@ -42,16 +51,13 @@ func main() {
 		Long:  "Webhook to set node selectors to PG pods as well as storage classes for their PVCs.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Get a config to talk to the apiserver
-			cfg, err := clientConfig.GetConfig()
-			if err != nil {
-				return fmt.Errorf("failed to get config for apiserver: %w", err)
+			cfg := ctrl.GetConfigOrDie()
+
+			metricsServerOptions := metricsserver.Options{
+				BindAddress: viper.GetString(config.MetricsAddr),
 			}
 
-			// init required schemes
-			scheme := runtime.NewScheme()
-			pgapi.AddToScheme(scheme)          // cloudnative-pg objects
-			clientgoscheme.AddToScheme(scheme) // standard K8s objects
-
+			var err error
 			var mgr manager.Manager
 			// connecting to the k8s api server fails if an e.g. istio sidecar has not yet finished starting up
 			retry.OnError(wait.Backoff{
@@ -63,10 +69,11 @@ func main() {
 				mgr, err = manager.New(cfg, manager.Options{
 					HealthProbeBindAddress: ":8081",
 					Scheme:                 scheme,
+					Metrics:                metricsServerOptions,
 					WebhookServer: ctrlwebhook.NewServer(ctrlwebhook.Options{
 						// listen on configured port for HTTPS requests for mutation
 						Port:    viper.GetInt(config.PodPort),
-						CertDir: pgtls.CertDir,
+						CertDir: pgtls.CertDir(),
 					}),
 				})
 				return err
@@ -96,11 +103,11 @@ func main() {
 			})
 			mgr.AddHealthzCheck("watch-events", watchdog.HealthzCheck)
 
-			go exposePrometheusMetrics()
 			go exposeDebugInfo()
 
 			caCert, err := pgtls.Generate()
 			if err != nil {
+				slog.Error("Failed to generate webhook certificates", "err", err)
 				return err
 			}
 
@@ -128,21 +135,6 @@ func main() {
 	if err != nil {
 		os.Exit(1)
 	}
-}
-
-func exposePrometheusMetrics() {
-	if !viper.GetBool(config.MetricsEnabled) {
-		return
-	}
-	port := viper.GetInt(config.MetricsPort)
-	slog.Info(fmt.Sprintf("Expose Prometheus metrics on port %d", port))
-	reg := prometheus.NewRegistry()
-	reg.MustRegister(
-		collectors.NewGoCollector(),
-		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
-	)
-	http.Handle("/", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))
-	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", port), nil))
 }
 
 func exposeDebugInfo() {

@@ -1,54 +1,58 @@
 package cluster
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
+	"sync"
 
+	"github.com/jaconi-io/ipoque-pg-webhook/pkg/config"
 	"github.com/jaconi-io/ipoque-pg-webhook/pkg/events"
 )
 
-type region struct {
-	name     string
-	isLeader bool
-}
-
 // map of node names to their region
-var nodes = map[string]string{}
+var nodeRegions = map[string]string{}
+var nodeRegionsLock = sync.RWMutex{}
 
-// map of all existing Regions by name
-var regions = map[string]region{}
+// map of node names to their AZs
+var nodeZones = map[string]string{}
+var nodeZonesLock = sync.RWMutex{}
+
+// map of all existing Regionnames to the info, if they are the leading region
+var regionLeader = map[string]bool{}
+var regionsLock = sync.RWMutex{}
 
 // Store will put region and primary-region information into internal state
-func Store(nodeName, regionName string, leader bool) {
+func Store(nodeName, regionName, zoneName string, shouldBeLeader bool) {
 
-	slog.Debug(fmt.Sprintf("Storing node %s, region %s, leader: %v", nodeName, regionName, leader))
+	slog.Log(context.Background(), config.LevelTrace, fmt.Sprintf("Storing node %s, region %s, zone: %s, leader: %v", nodeName, regionName, zoneName, shouldBeLeader))
 
 	var primaryChanged bool = false
 
-	nodes[nodeName] = regionName
+	saveNode(nodeName, regionName, zoneName)
 
-	if reg, ok := regions[regionName]; !ok {
+	regionsLock.Lock()
+	defer regionsLock.Unlock()
+	if isCurrentyLeader, ok := regionLeader[regionName]; !ok {
 		slog.Info(fmt.Sprintf("Create new region %s", regionName))
-		regions[regionName] = region{name: regionName, isLeader: leader}
-		if leader {
+		regionLeader[regionName] = shouldBeLeader
+		if shouldBeLeader {
 			primaryChanged = true
 		}
 	} else {
-		if leader && !reg.isLeader {
+		if shouldBeLeader && !isCurrentyLeader {
 			primaryChanged = true
 		}
-		reg.isLeader = leader
-		regions[regionName] = reg
+		regionLeader[regionName] = shouldBeLeader
 	}
 
 	if primaryChanged {
 		// we need to make all other regions to non-primaries
-		for n, rg := range regions {
+		for n := range regionLeader {
 			if n == regionName {
 				continue
 			}
-			rg.isLeader = false
-			regions[n] = rg
+			regionLeader[n] = false
 		}
 
 		// there is a new leader, so we need to change the primary instance
@@ -57,22 +61,55 @@ func Store(nodeName, regionName string, leader bool) {
 	}
 }
 
+func saveNode(nodeName, regionName, zoneName string) {
+	nodeRegionsLock.Lock()
+	defer nodeRegionsLock.Unlock()
+	nodeRegions[nodeName] = regionName
+
+	nodeZonesLock.Lock()
+	defer nodeZonesLock.Unlock()
+	nodeZones[nodeName] = zoneName
+}
+
 // GetRegionOfNode retrieves the the region, where the given node resides in
 func GetRegionOfNode(nodeName string) string {
-	return nodes[nodeName]
+	regionsLock.RLock()
+	defer regionsLock.RUnlock()
+	return nodeRegions[nodeName]
+}
+
+func GetZoneOfNode(nodeName string) string {
+	nodeZonesLock.RLock()
+	defer nodeZonesLock.RUnlock()
+	return nodeZones[nodeName]
+}
+
+func GetZoneCount() int {
+	nodeZonesLock.RLock()
+	defer nodeZonesLock.RUnlock()
+	temp := map[string]struct{}{}
+	for _, zone := range nodeZones {
+		temp[zone] = struct{}{}
+	}
+	return len(temp)
 }
 
 // GetPrimaryRegion retrieves the name of the current primary region
 func GetPrimaryRegion() string {
-	for n, r := range regions {
-		if r.isLeader {
-			return n
+	regionsLock.RLock()
+	defer regionsLock.RUnlock()
+	for region, isLeader := range regionLeader {
+		if isLeader {
+			return region
 		}
 	}
 	return ""
 }
 
+// -- HELPER methods for testing --
+
 func ClearState() {
-	nodes = map[string]string{}
-	regions = map[string]region{}
+	nodeRegions = map[string]string{}
+	nodeZones = map[string]string{}
+	regionLeader = map[string]bool{}
 }

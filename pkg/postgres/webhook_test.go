@@ -20,15 +20,11 @@ import (
 
 var webhook = defaulter{}
 
-const (
-	webhookTestCluster   = "test-cluster"
-	webhookTestNamespace = "test-namespace"
-)
-
 func TestDefault(t *testing.T) {
-
 	g := NewWithT(t)
+
 	ctx := context.Background()
+	defer teardown()
 
 	handler := slogassert.New(t, config.LevelTrace, slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{}))
 	slog.SetDefault(slog.New(handler))
@@ -44,8 +40,8 @@ func TestDefault(t *testing.T) {
 
 	clus := &pgapi.Cluster{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      webhookTestCluster,
-			Namespace: webhookTestNamespace,
+			Name:      clusterName,
+			Namespace: clusterNamespace,
 		},
 		Status: pgapi.ClusterStatus{},
 	}
@@ -70,14 +66,13 @@ func TestDefault(t *testing.T) {
 	handler.AssertMessage("Cluster is not registered yet")
 	handler.Reset()
 
-	internalCluster := RegisterOrUpdateCluster(webhookTestNamespace, webhookTestCluster, "1", "1", 3, 2)
-	defer DropCluster(webhookTestNamespace, webhookTestCluster)
+	internalCluster := RegisterOrUpdateCluster(clusterNamespace, clusterName, "1", "1", 3, 2)
 
-	internalCluster.RegisterOrUpdateInstance("1", "region1", true)
-	internalCluster.RegisterOrUpdateInstance("2", "region1", true)
-	internalCluster.RegisterOrUpdateInstance("3", "region2", true)
-	cluster.Store("x", "region1", true)
-	cluster.Store("y", "region2", false)
+	internalCluster.RegisterOrUpdateInstance("1", "region1", "zone", ip, true)
+	internalCluster.RegisterOrUpdateInstance("2", "region1", "zone", ip, true)
+	internalCluster.RegisterOrUpdateInstance("3", "region2", "zone", ip, true)
+	cluster.Store("x", "region1", "zone1", true)
+	cluster.Store("y", "region2", "zone2", false)
 
 	// instance already eligible
 	err = webhook.Default(ctx, clus)
@@ -85,7 +80,7 @@ func TestDefault(t *testing.T) {
 	handler.AssertMessage(fmt.Sprintf("Desired primary %s is already eligible primary", instanceName("2")))
 	handler.Reset()
 
-	cluster.Store("z", "region3", true)
+	cluster.Store("z", "region3", "zone3", true)
 
 	// no eligible instance found
 	err = webhook.Default(ctx, clus)
@@ -94,7 +89,7 @@ func TestDefault(t *testing.T) {
 	handler.AssertMessage("No eligible target instance found to be promoted to primary")
 	handler.Reset()
 
-	cluster.Store("y", "region2", true)
+	cluster.Store("y", "region2", "zone2", true)
 
 	// change desired primary to clus-3
 	err = webhook.Default(ctx, clus)
@@ -107,8 +102,8 @@ func TestDefault(t *testing.T) {
 
 func TestDefault_PermitsFallbackFailoverWhenLocalUnavailable(t *testing.T) {
 	g := NewWithT(t)
-	ctx := context.Background()
 
+	ctx := context.Background()
 	defer teardown()
 
 	events.SetListenersForRegionChange(func(context.Context, string) {})
@@ -120,12 +115,12 @@ func TestDefault_PermitsFallbackFailoverWhenLocalUnavailable(t *testing.T) {
 	)
 
 	// Register the topology internals (simulate dc-01 nodes as offline/missing by not registering them)
-	internalCluster := RegisterOrUpdateCluster(webhookTestNamespace, webhookTestCluster, "1", "1", 3, 2)
-	internalCluster.RegisterOrUpdateInstance("6", "dc-02", false)
+	internalCluster := RegisterOrUpdateCluster(clusterNamespace, clusterName, "1", "1", 3, 2)
+	internalCluster.RegisterOrUpdateInstance("6", "dc-02", "zone", ip, false)
 
 	// Set dc-01 as the leading zone in the topology tracker
-	cluster.Store("dc-01-node", "dc-01", true)
-	cluster.Store("dc-02-node", "dc-02", false)
+	cluster.Store("dc-01-node", "dc-01", "dc-01-01", true)
+	cluster.Store("dc-02-node", "dc-02", "dc-02-01", false)
 
 	// EXECUTE WEBHOOK
 	err := webhook.Default(ctx, clus)
@@ -139,8 +134,8 @@ func TestDefault_PermitsFallbackFailoverWhenLocalUnavailable(t *testing.T) {
 
 func TestDefault_UnregisteredTarget(t *testing.T) {
 	g := NewWithT(t)
-	ctx := context.Background()
 
+	ctx := context.Background()
 	defer teardown()
 
 	events.SetListenersForRegionChange(func(context.Context, string) {})
@@ -153,12 +148,12 @@ func TestDefault_UnregisteredTarget(t *testing.T) {
 
 	// Register topology: The new target '4' has NOT been registered by the Pod Watcher yet!
 	// It is a race condition. dc-01 has a perfectly healthy node ready to take over.
-	internalCluster := RegisterOrUpdateCluster(webhookTestNamespace, webhookTestCluster, "1", "1", 3, 2)
-	internalCluster.RegisterOrUpdateInstance("1", "dc-01", true)
-	internalCluster.RegisterOrUpdateInstance("2", "dc-01", true) // Preferred fallback target
+	internalCluster := RegisterOrUpdateCluster(clusterNamespace, clusterName, "1", "1", 3, 2)
+	internalCluster.RegisterOrUpdateInstance("1", "dc-01", "zone", ip, true)
+	internalCluster.RegisterOrUpdateInstance("2", "dc-01", "zone", ip, true) // Preferred fallback target
 
-	cluster.Store("dc-01-node", "dc-01", true)
-	cluster.Store("dc-02-node", "dc-02", false)
+	cluster.Store("dc-01-node", "dc-01", "dc-01-01", true)
+	cluster.Store("dc-02-node", "dc-02", "dc-02-01", false)
 
 	// Execute webhook
 	err := webhook.Default(ctx, clus)
@@ -169,8 +164,8 @@ func TestDefault_UnregisteredTarget(t *testing.T) {
 
 func TestDefault_PermitsFailoverDuringColdCacheInconsistency(t *testing.T) {
 	g := NewWithT(t)
-	ctx := context.Background()
 
+	ctx := context.Background()
 	defer teardown()
 
 	// CloudNativePG submits a cross-region failover mutation request
@@ -184,12 +179,9 @@ func TestDefault_PermitsFailoverDuringColdCacheInconsistency(t *testing.T) {
 	// When CloudNativePG attempts a failover simultaneously, `GetCluster` evaluates to `nil`
 	// because the operator has not yet populated its internal state.
 	//
-	// In the Pod Webhook (`operator/pkg/pods/webhook.go`), a `nil` cluster state returns an `error`,
-	// safely causing the Kubernetes API server to retry the request later.
-	// Conversely, the Cluster Webhook exits and returns `nil`. In K8s webhooks, a `nil` return
-	// instructs the API server to silently approve the request.
-	// As a result, the operator permits the cross-region failover to proceed without evaluation
-	// if the request occurs before the operator finishes hydrating its internal cache.
+	// The result handler implementation is up to the workload, which creates the resource
+	// (in this case: CNPG). As this does not have a retry-logic implemented, an error at
+	// this point, would be a stop-the-world event.
 
 	// Do NOT call `RegisterOrUpdateCluster` to physically simulate the unhydrated cold cache.
 
@@ -202,8 +194,8 @@ func TestDefault_PermitsFailoverDuringColdCacheInconsistency(t *testing.T) {
 
 func TestDefault_IgnoresLocalNodesDueToNaiveSyncReplicaSorting(t *testing.T) {
 	g := NewWithT(t)
-	ctx := context.Background()
 
+	ctx := context.Background()
 	defer teardown()
 
 	events.SetListenersForRegionChange(func(context.Context, string) {})
@@ -215,15 +207,15 @@ func TestDefault_IgnoresLocalNodesDueToNaiveSyncReplicaSorting(t *testing.T) {
 	)
 
 	// In this topology, dc-01 is the active leader.
-	cluster.Store("dc-01-node", "dc-01", true)
-	cluster.Store("dc-02-node", "dc-02", false)
+	cluster.Store("dc-01-node", "dc-01", "dc-01-01", true)
+	cluster.Store("dc-02-node", "dc-02", "dc-02-01", false)
 
 	// Set syncNum = 0. This restricts our internal operator logic to only assign 1 Sync status slot (limit=1).
-	internalCluster := RegisterOrUpdateCluster(webhookTestNamespace, webhookTestCluster, "1", "1", 3, 0)
+	internalCluster := RegisterOrUpdateCluster(clusterNamespace, clusterName, "1", "1", 3, 0)
 
-	internalCluster.RegisterOrUpdateInstance("1", "dc-01", false) // Node 1 (Primary) is DEAD
-	internalCluster.RegisterOrUpdateInstance("2", "dc-02", true)  // Node 2 (Cross-region) is HEALTHY
-	internalCluster.RegisterOrUpdateInstance("3", "dc-01", true)  // Node 3 (Domestic-region) is HEALTHY
+	internalCluster.RegisterOrUpdateInstance("1", "dc-01", "zone", ip, false) // Node 1 (Primary) is DEAD
+	internalCluster.RegisterOrUpdateInstance("2", "dc-02", "zone", ip, true)  // Node 2 (Cross-region) is HEALTHY
+	internalCluster.RegisterOrUpdateInstance("3", "dc-01", "zone", ip, true)  // Node 3 (Domestic-region) is HEALTHY
 
 	// Execute webhook
 	err := webhook.Default(ctx, clus)
@@ -245,8 +237,8 @@ func TestDefault_IgnoresLocalNodesDueToNaiveSyncReplicaSorting(t *testing.T) {
 
 func TestDefault_ForciblyFailsBackToPrimaryRegionDuringSecondaryFailover(t *testing.T) {
 	g := NewWithT(t)
-	ctx := context.Background()
 
+	ctx := context.Background()
 	defer teardown()
 
 	events.SetListenersForRegionChange(func(context.Context, string) {})
@@ -258,15 +250,15 @@ func TestDefault_ForciblyFailsBackToPrimaryRegionDuringSecondaryFailover(t *test
 	)
 
 	// Kubernetes natively labels `dc-01` as the immutable primary region
-	cluster.Store("dc-01-node", "dc-01", true)
-	cluster.Store("dc-02-node", "dc-02", false)
+	cluster.Store("dc-01-node", "dc-01", "dc-01-01", true)
+	cluster.Store("dc-02-node", "dc-02", "dc-02-01", false)
 
 	// syncNum = 2 (allows 3 total active sync replica slots)
-	internalCluster := RegisterOrUpdateCluster(webhookTestNamespace, webhookTestCluster, "4", "5", 3, 2)
+	internalCluster := RegisterOrUpdateCluster(clusterNamespace, clusterName, "4", "5", 3, 2)
 
-	internalCluster.RegisterOrUpdateInstance("1", "dc-01", true)  // Node 1 (dc-01) recovered and is healthy
-	internalCluster.RegisterOrUpdateInstance("4", "dc-02", false) // Node 4 (Current DR Primary) crashing
-	internalCluster.RegisterOrUpdateInstance("5", "dc-02", true)  // Node 5 (Target DR Secondary) healthy
+	internalCluster.RegisterOrUpdateInstance("1", "dc-01", "zone", ip, true)  // Node 1 (dc-01) recovered and is healthy
+	internalCluster.RegisterOrUpdateInstance("4", "dc-02", "zone", ip, false) // Node 4 (Current DR Primary) crashing
+	internalCluster.RegisterOrUpdateInstance("5", "dc-02", "zone", ip, true)  // Node 5 (Target DR Secondary) healthy
 
 	// Execute webhook
 	err := webhook.Default(ctx, clus)
@@ -287,8 +279,8 @@ func TestDefault_ForciblyFailsBackToPrimaryRegionDuringSecondaryFailover(t *test
 func buildCluster(currentPrimary, desiredPrimary string) *pgapi.Cluster {
 	return &pgapi.Cluster{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      webhookTestCluster,
-			Namespace: webhookTestNamespace,
+			Name:      clusterName,
+			Namespace: clusterNamespace,
 		},
 		Status: pgapi.ClusterStatus{
 			CurrentPrimary: instanceName(currentPrimary),
@@ -298,5 +290,5 @@ func buildCluster(currentPrimary, desiredPrimary string) *pgapi.Cluster {
 }
 
 func instanceName(instanceId string) string {
-	return fmt.Sprintf("%s-%s", webhookTestCluster, instanceId)
+	return fmt.Sprintf("%s-%s", clusterName, instanceId)
 }

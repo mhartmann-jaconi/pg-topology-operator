@@ -7,6 +7,7 @@ package events
 import (
 	"context"
 	"log/slog"
+	"sync"
 
 	"github.com/jaconi-io/ipoque-pg-webhook/pkg/config"
 )
@@ -20,22 +21,29 @@ type RegionChangeListener func(cancelable context.Context, newRegion string)
 const EventTypeRegionChanged = "PrimaryRegionChanged"
 
 var (
-	parentContext context.Context
+	parentContext = config.GetParentContext()
 
-	regionChangeChannel   chan string
-	regionChangeListeners []RegionChangeListener
-	regionChangeCtx       context.Context
+	regionChangeChannel   = make(chan string)
+	regionChangeListeners = make([]RegionChangeListener, 0)
+	regionChangeLock      = sync.RWMutex{}
+	regionChangeCtx       = context.WithValue(parentContext, "event", EventTypeRegionChanged)
+
+	initialized = false
 )
 
 // AddListenerForRegionChange adds a new event listener which will get notified in
 // case the primary region has changed.
 func AddListenerForRegionChange(listener RegionChangeListener) {
+	regionChangeLock.Lock()
+	defer regionChangeLock.Unlock()
 	regionChangeListeners = append(regionChangeListeners, listener)
 }
 
 // SetListenersForRegionChange overwrites all event listeners for primary region change
 // with the given ones.
 func SetListenersForRegionChange(newListeners ...RegionChangeListener) {
+	regionChangeLock.Lock()
+	defer regionChangeLock.Unlock()
 	regionChangeListeners = make([]RegionChangeListener, len(newListeners))
 	copy(regionChangeListeners, newListeners)
 }
@@ -46,10 +54,10 @@ func PrimaryRegionChanged(newRegion string) {
 }
 
 func initRegionChangeEvents() {
-	regionChangeChannel = make(chan string)
-	regionChangeListeners = make([]RegionChangeListener, 0)
-	regionChangeCtx = context.WithValue(parentContext, "event", EventTypeRegionChanged)
-
+	if initialized {
+		return
+	}
+	initialized = true
 	ctx, cancel := context.WithCancel(regionChangeCtx)
 	go func() {
 		// forever listen to regionChangeChannel until main context is closed
@@ -65,15 +73,20 @@ func initRegionChangeEvents() {
 				cancel()
 				// create new context and pass it to new goroutines
 				ctx, cancel = context.WithCancel(regionChangeCtx)
-				for _, listener := range regionChangeListeners {
-					go listener(ctx, newRegion)
-				}
+				notifyListeners(ctx, newRegion)
 			}
 		}
 	}()
 }
 
+func notifyListeners(ctx context.Context, newRegion string) {
+	regionChangeLock.RLock()
+	defer regionChangeLock.RUnlock()
+	for _, listener := range regionChangeListeners {
+		go listener(ctx, newRegion)
+	}
+}
+
 func init() {
-	parentContext = config.GetParentContext()
 	initRegionChangeEvents()
 }

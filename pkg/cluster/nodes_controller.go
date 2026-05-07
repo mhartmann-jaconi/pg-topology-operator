@@ -43,9 +43,10 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	}
 
 	region := node.Labels[viper.GetString(config.LabelRegion)]
+	zone := node.Labels[viper.GetString(config.LabelZone)]
 	_, isLeader := node.Labels[viper.GetString(config.LabelLeader)]
 
-	Store(node.Name, region, isLeader)
+	Store(node.Name, region, zone, isLeader)
 
 	return reconcile.Result{}, nil
 }

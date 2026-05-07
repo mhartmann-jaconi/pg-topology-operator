@@ -17,9 +17,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-const (
-	testCluster = "foo"
-)
+var nodeName = "node"
 
 func TestReconcile(t *testing.T) {
 	t.Run("returns nil for deleted pods", func(t *testing.T) {
@@ -48,7 +46,7 @@ func TestReconcile(t *testing.T) {
 	t.Run("returns an error when cluster state is not registered yet", func(t *testing.T) {
 		g := NewWithT(t)
 
-		pod := newReconcilePod("default", testCluster, "1")
+		pod := newReconcilePod(clusterNamespace, clusterName, "1")
 
 		err := runReconcileWithPod(pod)
 
@@ -61,10 +59,10 @@ func TestReconcile(t *testing.T) {
 		events.SetListenersForRegionChange(func(ctx context.Context, s string) {})
 
 		clus := createTestCluster(t)
-		inst := clus.RegisterOrUpdateInstance("1", "region-a", true)
+		inst := clus.RegisterOrUpdateInstance("1", "region-a", "zone", "1.2.3.4", true)
 
 		timestamp := metav1.Now()
-		pod := newReconcilePod("default", testCluster, "1")
+		pod := newReconcilePod(clusterNamespace, clusterName, "1")
 		pod.DeletionTimestamp = &timestamp
 		pod.Finalizers = []string{"test.finalizer/cleanup"}
 
@@ -78,7 +76,7 @@ func TestReconcile(t *testing.T) {
 		g := NewWithT(t)
 
 		clus := createTestCluster(t)
-		pod := newReconcilePod("default", testCluster, "1")
+		pod := newReconcilePod(clusterNamespace, clusterName, "1")
 		pod.Spec.NodeName = ""
 
 		err := runReconcileWithPod(pod)
@@ -91,7 +89,7 @@ func TestReconcile(t *testing.T) {
 		g := NewWithT(t)
 
 		clus := createTestCluster(t)
-		pod := newReconcilePod("default", testCluster, "1")
+		pod := newReconcilePod(clusterNamespace, clusterName, "1")
 		pod.Spec.NodeName = "unknown-node"
 
 		err := runReconcileWithPod(pod)
@@ -105,11 +103,9 @@ func TestReconcile(t *testing.T) {
 		g := NewWithT(t)
 
 		clus := createTestCluster(t)
-		nodeName := "node"
-		cluster.Store(nodeName, "region", false)
+		cluster.Store(nodeName, "region", "zone", false)
 
-		pod := newReconcilePod("default", testCluster, "1")
-		pod.Spec.NodeName = nodeName
+		pod := newReconcilePod(clusterNamespace, clusterName, "1")
 		pod.Status.ContainerStatuses = []corev1.ContainerStatus{{Ready: true}}
 
 		err := runReconcileWithPod(pod)
@@ -125,11 +121,9 @@ func TestReconcile(t *testing.T) {
 		g := NewWithT(t)
 
 		clus := createTestCluster(t)
-		nodeName := "node"
-		cluster.Store(nodeName, "region", false)
+		cluster.Store(nodeName, "region", "zone", false)
 
-		pod := newReconcilePod("default", testCluster, "1")
-		pod.Spec.NodeName = nodeName
+		pod := newReconcilePod(clusterNamespace, clusterName, "1")
 		pod.Status.ContainerStatuses = []corev1.ContainerStatus{{Ready: false}}
 
 		err := runReconcileWithPod(pod)
@@ -145,13 +139,11 @@ func TestReconcile(t *testing.T) {
 		g := NewWithT(t)
 
 		clus := createTestCluster(t)
-		inst := clus.RegisterOrUpdateInstance("1", "region", true)
+		inst := clus.RegisterOrUpdateInstance("1", "region", "zone", "1.2.3.4", true)
 
-		nodeName := "node"
-		cluster.Store(nodeName, "region", false)
+		cluster.Store(nodeName, "region", "zone", false)
 
-		pod := newReconcilePod("default", testCluster, "1")
-		pod.Spec.NodeName = nodeName
+		pod := newReconcilePod(clusterNamespace, clusterName, "1")
 		pod.Status.ContainerStatuses = []corev1.ContainerStatus{{Ready: false}}
 
 		err := runReconcileWithPod(pod)
@@ -166,11 +158,9 @@ func TestReconcile(t *testing.T) {
 		g := NewWithT(t)
 
 		clus := createTestCluster(t)
-		nodeName := "node"
-		cluster.Store(nodeName, "region", false)
+		cluster.Store(nodeName, "region", "zone", false)
 
-		pod := newReconcilePod("default", testCluster, "1")
-		pod.Spec.NodeName = nodeName
+		pod := newReconcilePod(clusterNamespace, clusterName, "1")
 		pod.Labels[postgres.LabelPGJobRole] = postgres.PGRoleInitDB
 		pod.Status.ContainerStatuses = []corev1.ContainerStatus{{Ready: true}}
 
@@ -183,10 +173,37 @@ func TestReconcile(t *testing.T) {
 	})
 }
 
-func createTestCluster(t *testing.T) *postgres.Cluster {
-	clus := postgres.RegisterOrUpdateCluster("default", testCluster, "1", "1", 1, 0)
+// TestIsHealthy_ContainerNotReady verifies that a pod with multiple containers
+// is unhealthy when at least one container is not ready (e.g. a crashing sidecar).
+func TestIsHealthy_ContainerNotReady(t *testing.T) {
+	g := NewWithT(t)
+
+	pod := &corev1.Pod{
+		Status: corev1.PodStatus{
+			Phase: corev1.PodRunning,
+			ContainerStatuses: []corev1.ContainerStatus{
+				{Name: "postgres", Ready: true},
+				{Name: "sidecar", Ready: false}, // sidecar is crashing
+			},
+		},
+	}
+
+	// Pod should be unhealthy because the sidecar is not ready
+	g.Expect(isHealthy(pod)).To(BeFalse())
+
+	// All containers ready → healthy
+	pod.Status.ContainerStatuses[1].Ready = true
+	g.Expect(isHealthy(pod)).To(BeTrue())
+
+	// Pod not running → unhealthy regardless of container status
+	pod.Status.Phase = corev1.PodPending
+	g.Expect(isHealthy(pod)).To(BeFalse())
+}
+
+func createTestCluster(t *testing.T) postgres.PGCluster {
+	clus := postgres.RegisterOrUpdateCluster(clusterNamespace, clusterName, "1", "1", 1, 0)
 	t.Cleanup(func() {
-		postgres.DropCluster("default", testCluster)
+		postgres.DropCluster(clusterNamespace, clusterName)
 		cluster.ClearState()
 	})
 	return clus
@@ -233,7 +250,7 @@ func newReconcilePod(namespace, clusterName, instanceID string) *corev1.Pod {
 			},
 		},
 		Spec: corev1.PodSpec{
-			NodeName: "node-a",
+			NodeName: nodeName,
 		},
 		Status: corev1.PodStatus{
 			Phase: corev1.PodRunning,

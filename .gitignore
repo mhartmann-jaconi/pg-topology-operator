@@ -8,6 +8,7 @@ bin/*
 Dockerfile.cross
 build/*
 *.tgz
+config/*
 
 # Test binary, built with `go test -c`
 *.test

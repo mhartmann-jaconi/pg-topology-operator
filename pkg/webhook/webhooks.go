@@ -6,6 +6,7 @@ package webhook
 import (
 	"bytes"
 	"context"
+	"fmt"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -31,7 +32,12 @@ func update(ctx context.Context, client kubernetes.Interface, ca *bytes.Buffer, 
 		return err
 	} else {
 		// Update the existing configuration.
-		existing.Webhooks[0].ClientConfig.CABundle = ca.Bytes()
+		if len(existing.Webhooks) < 1 {
+			panic(fmt.Sprintf("Invalid webhook configuration %s: Missing webhooks", name))
+		}
+		for i, _ := range existing.Webhooks {
+			existing.Webhooks[i].ClientConfig.CABundle = ca.Bytes()
+		}
 		_, err := client.AdmissionregistrationV1().
 			MutatingWebhookConfigurations().
 			Update(ctx, existing, metav1.UpdateOptions{})

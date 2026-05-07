@@ -71,6 +71,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 
 	nodeName := pod.Spec.NodeName
 	region := cluster.GetRegionOfNode(nodeName)
+	zone := cluster.GetZoneOfNode(nodeName)
 
 	if region == "" {
 		slog.DebugContext(ctx, fmt.Sprintf("Skip %s as node is %s not registered yet", pod.Name, nodeName))
@@ -80,7 +81,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	// as long as setup is running, instance can not be considered as healthy
 	instanceIsHealthy := isHealthy(pod) && !isSetupJob
 
-	clus.RegisterOrUpdateInstance(instanceId, region, instanceIsHealthy)
+	clus.RegisterOrUpdateInstance(instanceId, region, zone, pod.Status.PodIP, instanceIsHealthy)
 
 	return reconcile.Result{}, nil
 }
