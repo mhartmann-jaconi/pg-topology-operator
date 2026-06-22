@@ -2,6 +2,7 @@ package cluster
 
 import (
 	"context"
+	"fmt"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -117,4 +118,27 @@ func TestGetZoneCount(t *testing.T) {
 	// Fourth node in yet another zone → three unique zones
 	Store("node4", "dc-02", "az-c", false)
 	g.Expect(GetZoneCount()).To(Equal(3))
+}
+
+// TestGetRegionOfNode_ConcurrentAccess verifies that concurrent calls to
+// Store() and GetRegionOfNode() do not trigger a data race on the
+// nodeRegions map.
+func TestGetRegionOfNode_ConcurrentAccess(t *testing.T) {
+	defer cleanup()
+
+	events.SetListenersForRegionChange(func(ctx context.Context, s string) {})
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := 0; i < 500; i++ {
+			Store(fmt.Sprintf("node-%d", i%10), "dc-01", "az-a", false)
+		}
+	}()
+
+	for i := 0; i < 500; i++ {
+		GetRegionOfNode(fmt.Sprintf("node-%d", i%10))
+	}
+	<-done
+	// If the race detector fires, this test fails.
 }

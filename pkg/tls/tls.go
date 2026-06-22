@@ -166,7 +166,7 @@ func dnsNames() []string {
 func writeFile(filepath string, sCert *bytes.Buffer) error {
 	f, err := os.OpenFile(
 		filepath,
-		os.O_CREATE|os.O_WRONLY,
+		os.O_CREATE|os.O_WRONLY|os.O_TRUNC,
 		0600,
 	)
 	if err != nil {

@@ -73,8 +73,8 @@ func saveNode(nodeName, regionName, zoneName string) {
 
 // GetRegionOfNode retrieves the the region, where the given node resides in
 func GetRegionOfNode(nodeName string) string {
-	regionsLock.RLock()
-	defer regionsLock.RUnlock()
+	nodeRegionsLock.RLock()
+	defer nodeRegionsLock.RUnlock()
 	return nodeRegions[nodeName]
 }
 
@@ -108,6 +108,8 @@ func GetPrimaryRegion() string {
 
 // -- HELPER methods for testing --
 
+// ClearState resets all internal maps to their zero state.
+// It is not thread-safe and should only be called from test teardown (defer cleanup).
 func ClearState() {
 	nodeRegions = map[string]string{}
 	nodeZones = map[string]string{}
