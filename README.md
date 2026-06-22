@@ -34,8 +34,9 @@ helm install pg-topology helm -n cnpg-system
 ### docker
 
 ```
-docker build . -f Dockerfile -t docker.lp.rsint.net/platform/pg-topology-operator:v0.11.1
-docker push docker.lp.rsint.net/platform/pg-topology-operator:v0.11.1
+DOCKER_TAG="v0.11.1"
+docker build . -f Dockerfile -t docker.lp.rsint.net/platform/pg-topology-operator:$DOCKER_TAG --label com.ipoque.version=$DOCKER_TAG
+docker push docker.lp.rsint.net/platform/pg-topology-operator:$DOCKER_TAG
 ```
 or
 ```
@@ -46,10 +47,18 @@ make DOCKER_TAG=v0.11.1 docker-upload
 
 ### helm
 
+Helm version is managed in `helm/Chart.yaml` file. The docker image version also needs to be referenced there.
+
 ```
 export AD_USER=...
 export AD_PASSWORD=...
 make helm-upload
+```
+
+### Git Tag
+
+```
+make DOCKER_TAG=v0.11.1 git-tag
 ```
 
 ## cloudnative-pg behaviour

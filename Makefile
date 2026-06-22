@@ -49,7 +49,7 @@ docker-build:
 
 .PHONY: docker-upload
 docker-upload: docker-build
-	docker login ${DOCKER_REGISTRY} --username ${AD_USER} --password ${AD_PASSWORD}
+	docker login ${DOCKER_REGISTRY} --username ${AD_USER} --password ${AD_PASSWORD} --label com.ipoque.version=${DOCKER_TAG}
 	docker push ${DOCKER_IMAGE}
 
 .PHONY: helm-package
@@ -61,6 +61,11 @@ helm-upload: helm-package
 	chart=$$(ls -t1 pg*.tgz | head -n1); \
 	echo "uploading chart $$chart..."; \
 	curl -k -u ${AD_USER}:${AD_PASSWORD} -XPUT "${HELM_REPO_PATH}/$$chart" -T $$chart
+
+git-tag:
+	chart=$$(ls -t1 pg*.tgz | head -n1 | sed 's/.*-\([0-9]*\.[0-9]*\.[0-9]*\).*$$/\1/'); \
+	echo "create git tag $$chart..."; \
+	git tag -a $$chart -m "Uses docker version ${DOCKER_TAG}"
 
 # --- ENVTEST INTEGRATION LAYER ---
 ENVTEST_K8S_VERSION = 1.28.0
