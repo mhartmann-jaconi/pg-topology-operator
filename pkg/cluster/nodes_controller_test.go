@@ -46,14 +46,6 @@ func TestReconcile(t *testing.T) {
 	g.Expect(GetPrimaryRegion()).To(Equal("dc-01"))
 	g.Eventually(getChangeCount, 20*time.Millisecond).Should(Equal(int32(1)))
 
-	// make node3 unhealthy and try to reconcile -> no change
-	node3.Spec.Taints = []corev1.Taint{{Effect: corev1.TaintEffectNoSchedule}}
-	node3.ObjectMeta.Labels["lead"] = "yep"
-	_, err = runReconcile(node3)
-	g.Expect(err).To(BeNil())
-	g.Expect(GetPrimaryRegion()).To(Equal("dc-01"))
-	g.Eventually(getChangeCount, 20*time.Millisecond).Should(Equal(int32(1)))
-
 	node4.ObjectMeta.Labels["lead"] = "yep"
 	_, err = runReconcile(node4)
 
@@ -141,35 +133,6 @@ func TestReconcile_StoresHealthyNodeRegion(t *testing.T) {
 
 	// Verify the node's region was stored
 	g.Expect(GetRegionOfNode("replica-node")).To(Equal("dc-02"))
-}
-
-// TestIsHealthy_NodeBeingDeleted verifies that a node marked for deletion
-// is treated as unhealthy and its leader label is ignored.
-// Note: The fake client rejects objects with DeletionTimestamp (it's a server-side field),
-// so we test isHealthy directly instead of going through the full Reconcile loop.
-func TestIsHealthy_NodeBeingDeleted(t *testing.T) {
-	g := NewWithT(t)
-
-	// Create a healthy leader node, then simulate API server deletion
-	now := metav1.Now()
-	node := createNode("dying-node", "dc-01", "zone", true, true)
-	node.DeletionTimestamp = &now
-
-	// isHealthy should return false for a node being deleted,
-	// even though it has no taints and is schedulable
-	g.Expect(isHealthy(node)).To(BeFalse())
-}
-
-// TestIsHealthy_Unschedulable verifies that a cordoned node (kubectl cordon)
-// is treated as unhealthy and excluded from region tracking.
-func TestIsHealthy_Unschedulable(t *testing.T) {
-	g := NewWithT(t)
-
-	// Simulate a cordoned node: healthy but marked unschedulable by the operator
-	node := createNode("cordoned-node", "dc-01", "zone", true, true)
-	node.Spec.Unschedulable = true
-
-	g.Expect(isHealthy(node)).To(BeFalse())
 }
 
 func runReconcile(node *corev1.Node) (reconcile.Result, error) {

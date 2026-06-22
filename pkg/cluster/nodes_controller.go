@@ -36,12 +36,6 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		return reconcile.Result{}, err
 	}
 
-	if !isHealthy(node) {
-		// ignore
-		slog.Debug(fmt.Sprintf("Ignore node %s as it is not healthy", node.Name))
-		return reconcile.Result{}, nil
-	}
-
 	region := node.Labels[viper.GetString(config.LabelRegion)]
 	zone := node.Labels[viper.GetString(config.LabelZone)]
 	_, isLeader := node.Labels[viper.GetString(config.LabelLeader)]
@@ -49,18 +43,6 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	Store(node.Name, region, zone, isLeader)
 
 	return reconcile.Result{}, nil
-}
-
-func isHealthy(node *v1.Node) bool {
-	if node.DeletionTimestamp != nil {
-		return false
-	}
-	for _, taint := range node.Spec.Taints {
-		if taint.Effect == v1.TaintEffectNoSchedule {
-			return false
-		}
-	}
-	return !node.Spec.Unschedulable
 }
 
 func InitController(mgr manager.Manager) reconcile.Reconciler {
