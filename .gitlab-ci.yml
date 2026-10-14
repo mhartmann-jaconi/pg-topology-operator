@@ -6,9 +6,8 @@ default:
 
 stages:
   - version-check
-  - app-release
-  - helm-release
   - test
+  - lint
   - build
   - deploy
   - git-tag
@@ -29,96 +28,28 @@ app version check:
       APP_VERSION="$(make --no-print-directory print-app-version)"
       DOCKER_IMAGE="$(make --no-print-directory print-docker-image)"
       DOCKER_REGISTRY="$(make --no-print-directory print-docker-registry)"
+
       podman login "${DOCKER_REGISTRY}" --username "${AD_USER}" --password "${AD_PASSWORD}"
 
+      {
+        printf 'APP_VERSION=%s\n' "${APP_VERSION}"
+        printf 'DOCKER_IMAGE=%s\n' "${DOCKER_IMAGE}"
+        printf 'DOCKER_REGISTRY=%s\n' "${DOCKER_REGISTRY}"
+      } > app.env
+
       if podman manifest inspect "docker://${DOCKER_IMAGE}" >/dev/null 2>&1; then
-        cat > app-release-child.yml <<YAML
-      default:
-        image: docker.lp.rsint.net/coc/podman/alpine:3.23
-        tags:
-          - podman
-
-      stages:
-        - report
-        - git-tag
-
-      app release skipped:
-        stage: report
-        script:
-          - echo "Docker image ${DOCKER_IMAGE} for APP_VERSION ${APP_VERSION} already exists; skipping app release."
-
-      app git tag:
-        stage: git-tag
-        needs:
-          - job: app release skipped
-            artifacts: false
-        before_script:
-          - apk add --update make git
-          - git config user.name "GitLab CI"
-          - git config user.email "gitlab-ci@\${CI_SERVER_HOST}"
-          - git remote set-url origin "https://gitlab-ci-token:\${CI_JOB_TOKEN}@\${CI_SERVER_HOST}/\${CI_PROJECT_PATH}.git"
-        script:
-          - make git-tag-app
-      YAML
+        printf 'APP_RELEASE_REQUIRED=false\n' >> app.env
+        echo "Docker image ${DOCKER_IMAGE} for APP_VERSION ${APP_VERSION} already exists; skipping app build/push."
       else
-        cat > app-release-child.yml <<'YAML'
-      default:
-        image: docker.lp.rsint.net/coc/podman/alpine:3.23
-        tags:
-          - podman
-
-      stages:
-        - build
-        - deploy
-        - git-tag
-
-      app docker build:
-        stage: build
-        before_script:
-          - apk add --update make podman
-        script:
-          - make CONTAINER_ENGINE=podman docker-build
-          - podman save "$(make --no-print-directory print-docker-image)" -o image.tar
-        artifacts:
-          expire_in: 1h
-          paths:
-            - image.tar
-
-      app docker push:
-        stage: deploy
-        needs:
-          - job: app docker build
-            artifacts: true
-        before_script:
-          - apk add --update make podman
-        script:
-          - |
-            set -e
-            DOCKER_IMAGE="$(make --no-print-directory print-docker-image)"
-            DOCKER_REGISTRY="$(make --no-print-directory print-docker-registry)"
-            podman login "${DOCKER_REGISTRY}" --username "${AD_USER}" --password "${AD_PASSWORD}"
-            podman load -i image.tar
-            podman push "${DOCKER_IMAGE}"
-
-      app git tag:
-        stage: git-tag
-        needs:
-          - job: app docker push
-            artifacts: false
-        before_script:
-          - apk add --update make git
-          - git config user.name "GitLab CI"
-          - git config user.email "gitlab-ci@${CI_SERVER_HOST}"
-          - git remote set-url origin "https://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
-        script:
-          - make git-tag-app
-      YAML
+        printf 'APP_RELEASE_REQUIRED=true\n' >> app.env
+        echo "Docker image ${DOCKER_IMAGE} does not exist yet; app build/push is required."
       fi
   artifacts:
     expire_in: 1h
-    when: always
+    reports:
+      dotenv: app.env
     paths:
-      - app-release-child.yml
+      - app.env
   rules:
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
 
@@ -135,127 +66,28 @@ helm version check:
       HELM_CHART_URL="$(make --no-print-directory print-helm-chart-url)"
       http_code="$(curl -k -sSL -o /dev/null -w "%{http_code}" -u "${AD_USER}:${AD_PASSWORD}" "${HELM_CHART_URL}")"
 
+      {
+        printf 'CHART_VERSION=%s\n' "${CHART_VERSION}"
+        printf 'HELM_CHART_PACKAGE=%s\n' "${HELM_CHART_PACKAGE}"
+        printf 'HELM_CHART_URL=%s\n' "${HELM_CHART_URL}"
+      } > helm.env
+
       if [ "${http_code}" = "200" ]; then
-        cat > helm-release-child.yml <<YAML
-      default:
-        image: docker.lp.rsint.net/coc/podman/alpine:3.23
-        tags:
-          - podman
-
-      stages:
-        - report
-        - git-tag
-
-      helm release skipped:
-        stage: report
-        script:
-          - echo "Helm chart ${HELM_CHART_PACKAGE} for CHART_VERSION ${CHART_VERSION} already exists; skipping helm release."
-
-      helm git tag:
-        stage: git-tag
-        needs:
-          - job: helm release skipped
-            artifacts: false
-        before_script:
-          - apk add --update make git
-          - git config user.name "GitLab CI"
-          - git config user.email "gitlab-ci@\${CI_SERVER_HOST}"
-          - git remote set-url origin "https://gitlab-ci-token:\${CI_JOB_TOKEN}@\${CI_SERVER_HOST}/\${CI_PROJECT_PATH}.git"
-        script:
-          - make git-tag-chart
-      YAML
+        printf 'HELM_RELEASE_REQUIRED=false\n' >> helm.env
+        echo "Helm chart ${HELM_CHART_PACKAGE} for CHART_VERSION ${CHART_VERSION} already exists; skipping helm package/upload."
       elif [ "${http_code}" = "404" ]; then
-        cat > helm-release-child.yml <<'YAML'
-      default:
-        image: docker.lp.rsint.net/coc/podman/alpine:3.23
-        tags:
-          - podman
-
-      stages:
-        - lint
-        - package
-        - deploy
-        - git-tag
-
-      helm lint:
-        stage: lint
-        before_script:
-          - apk add --update make helm
-        script:
-          - make helm-test
-
-      helm package:
-        stage: package
-        needs:
-          - job: helm lint
-            artifacts: false
-        before_script:
-          - apk add --update make helm
-        script:
-          - make helm-package
-        artifacts:
-          expire_in: 1h
-          paths:
-            - "*.tgz"
-
-      helm upload:
-        stage: deploy
-        needs:
-          - job: helm package
-            artifacts: true
-        before_script:
-          - apk add --update make curl
-        script:
-          - make helm-upload
-
-      helm git tag:
-        stage: git-tag
-        needs:
-          - job: helm upload
-            artifacts: false
-        before_script:
-          - apk add --update make git
-          - git config user.name "GitLab CI"
-          - git config user.email "gitlab-ci@${CI_SERVER_HOST}"
-          - git remote set-url origin "https://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
-        script:
-          - make git-tag-chart
-      YAML
+        printf 'HELM_RELEASE_REQUIRED=true\n' >> helm.env
+        echo "Helm chart ${HELM_CHART_PACKAGE} does not exist yet; helm package/upload is required."
       else
         echo "Unexpected HTTP status ${http_code} while checking ${HELM_CHART_URL}" >&2
         exit 1
       fi
   artifacts:
     expire_in: 1h
-    when: always
+    reports:
+      dotenv: helm.env
     paths:
-      - helm-release-child.yml
-  rules:
-    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
-
-app release:
-  stage: app-release
-  needs:
-    - job: app version check
-      artifacts: true
-  trigger:
-    include:
-      - artifact: app-release-child.yml
-        job: app version check
-    strategy: depend
-  rules:
-    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
-
-helm release:
-  stage: helm-release
-  needs:
-    - job: helm version check
-      artifacts: true
-  trigger:
-    include:
-      - artifact: helm-release-child.yml
-        job: helm version check
-    strategy: depend
+      - helm.env
   rules:
     - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
 
@@ -268,3 +100,163 @@ merge request test:
     - make test
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+
+helm lint:
+  stage: lint
+  image: docker.lp.rsint.net/coc/podman/alpine:3.23
+  needs:
+    - job: helm version check
+      artifacts: true
+  before_script:
+    - apk add --update make helm
+  script:
+    - |
+      set -e
+      . ./helm.env
+      if [ "${HELM_RELEASE_REQUIRED}" != "true" ]; then
+        echo "Helm release is not required; skipping lint."
+        exit 0
+      fi
+      make helm-test
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+
+app docker build:
+  stage: build
+  image: docker.lp.rsint.net/coc/podman/alpine:3.23
+  needs:
+    - job: app version check
+      artifacts: true
+  before_script:
+    - apk add --update make podman
+  script:
+    - |
+      set -e
+      . ./app.env
+      if [ "${APP_RELEASE_REQUIRED}" != "true" ]; then
+        echo "App release is not required; skipping docker build."
+        : > image.tar
+        exit 0
+      fi
+      make CONTAINER_ENGINE=podman docker-build
+      podman save "${DOCKER_IMAGE}" -o image.tar
+  artifacts:
+    expire_in: 1h
+    paths:
+      - image.tar
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+
+helm package:
+  stage: build
+  image: docker.lp.rsint.net/coc/podman/alpine:3.23
+  needs:
+    - job: helm version check
+      artifacts: true
+    - job: helm lint
+      artifacts: false
+  before_script:
+    - apk add --update make helm
+  script:
+    - |
+      set -e
+      . ./helm.env
+      : > .helm-package-artifact
+      if [ "${HELM_RELEASE_REQUIRED}" != "true" ]; then
+        echo "Helm release is not required; skipping package."
+        exit 0
+      fi
+      make helm-package
+  artifacts:
+    expire_in: 1h
+    paths:
+      - "*.tgz"
+      - .helm-package-artifact
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+
+app docker push:
+  stage: deploy
+  image: docker.lp.rsint.net/coc/podman/alpine:3.23
+  needs:
+    - job: app version check
+      artifacts: true
+    - job: app docker build
+      artifacts: true
+  before_script:
+    - apk add --update podman
+  script:
+    - |
+      set -e
+      . ./app.env
+      if [ "${APP_RELEASE_REQUIRED}" != "true" ]; then
+        echo "App release is not required; skipping docker push."
+        exit 0
+      fi
+      podman login "${DOCKER_REGISTRY}" --username "${AD_USER}" --password "${AD_PASSWORD}"
+      podman load -i image.tar
+      podman push "${DOCKER_IMAGE}"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+
+helm upload:
+  stage: deploy
+  image: docker.lp.rsint.net/coc/podman/alpine:3.23
+  needs:
+    - job: helm version check
+      artifacts: true
+    - job: helm package
+      artifacts: true
+  before_script:
+    - apk add --update make curl
+  script:
+    - |
+      set -e
+      . ./helm.env
+      if [ "${HELM_RELEASE_REQUIRED}" != "true" ]; then
+        echo "Helm release is not required; skipping upload."
+        exit 0
+      fi
+      make helm-upload
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+
+app git tag:
+  stage: git-tag
+  image: docker.lp.rsint.net/coc/podman/alpine:3.23
+  needs:
+    - job: app version check
+      artifacts: true
+    - job: app docker push
+      artifacts: false
+  before_script:
+    - apk add --update make git
+    - git config user.name "GitLab CI"
+    - git config user.email "gitlab-ci@${CI_SERVER_HOST}"
+  script:
+    - |
+      set -e
+      . ./app.env
+      make git-tag-app
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+
+helm git tag:
+  stage: git-tag
+  image: docker.lp.rsint.net/coc/podman/alpine:3.23
+  needs:
+    - job: helm version check
+      artifacts: true
+    - job: helm upload
+      artifacts: false
+  before_script:
+    - apk add --update make git
+    - git config user.name "GitLab CI"
+    - git config user.email "gitlab-ci@${CI_SERVER_HOST}"
+  script:
+    - |
+      set -e
+      . ./helm.env
+      make git-tag-chart
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
