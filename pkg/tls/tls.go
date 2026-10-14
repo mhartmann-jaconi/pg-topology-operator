@@ -12,8 +12,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/jaconi-io/ipoque-pg-webhook/pkg/config"
 	"github.com/spf13/viper"
+	"vcs01.rsint.net/comvidence/sources/platform/tools/pg-topology-operator/pkg/config"
 )
 
 const CertFile = "tls.crt"

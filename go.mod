@@ -1,6 +1,6 @@
-module github.com/jaconi-io/ipoque-pg-webhook
+module vcs01.rsint.net/comvidence/sources/platform/tools/pg-topology-operator
 
-go 1.25.0
+go 1.27.0
 
 require (
 	github.com/cloudnative-pg/cloudnative-pg v1.28.1

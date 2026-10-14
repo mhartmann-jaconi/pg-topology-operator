@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/jaconi-io/ipoque-pg-webhook/pkg/cluster"
-	"github.com/jaconi-io/ipoque-pg-webhook/pkg/config"
-	"github.com/jaconi-io/ipoque-pg-webhook/pkg/postgres"
+	"vcs01.rsint.net/comvidence/sources/platform/tools/pg-topology-operator/pkg/cluster"
+	"vcs01.rsint.net/comvidence/sources/platform/tools/pg-topology-operator/pkg/config"
+	"vcs01.rsint.net/comvidence/sources/platform/tools/pg-topology-operator/pkg/postgres"
 
 	"github.com/spf13/viper"
 

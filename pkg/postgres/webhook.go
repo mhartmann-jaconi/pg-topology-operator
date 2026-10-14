@@ -6,9 +6,9 @@ import (
 	"log/slog"
 
 	pgapi "github.com/cloudnative-pg/cloudnative-pg/api/v1"
-	"github.com/jaconi-io/ipoque-pg-webhook/pkg/config"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"vcs01.rsint.net/comvidence/sources/platform/tools/pg-topology-operator/pkg/config"
 )
 
 const mutationEndpoint string = "/mutate-clusters"

@@ -1,9 +1,0 @@
-FROM debian:13.2-slim
-
-RUN apt-get update
-RUN apt-get install -y apt-transport-https gpg ca-certificates curl wget
-RUN wget -O - https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-keyring.gpg
-RUN echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-keyring.gpg] https://download.docker.com/linux/ubuntu focal stable" >> /etc/apt/sources.list.d/docker-stable.list
-RUN wget -O - https://packages.buildkite.com/helm-linux/helm-debian/gpgkey | gpg --dearmor -o /usr/share/keyrings/helm-keyring.gpg
-RUN echo "deb [arch=amd64 signed-by=/usr/share/keyrings/helm-keyring.gpg] https://packages.buildkite.com/helm-linux/helm-debian/any/ any main" >> /etc/apt/sources.list.d/helm-main.list
-RUN apt-get update && apt-get install -y make helm docker-ce  docker-ce-cli

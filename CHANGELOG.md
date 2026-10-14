@@ -11,6 +11,12 @@ Both components follow [Semantic Versioning](https://semver.org/).
 
 ## Application (Docker Image)
 
+### [v0.2.0] - 2026-10-04
+
+#### Changed 
+
+- Upgraded to golang 1.27 version
+
 ### [v0.11.1] - 2026-07-01
 
 First main release.
@@ -18,6 +24,12 @@ First main release.
 ---
 
 ## Helm Chart
+
+### [0.6.0] - 2026-10-04
+
+#### Changed 
+
+- Uses operator version v0.2.0
 
 ### [0.5.6] - 2026-07-01
 

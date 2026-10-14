@@ -10,7 +10,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/spf13/viper"
 
-	"github.com/jaconi-io/ipoque-pg-webhook/pkg/config"
+	"vcs01.rsint.net/comvidence/sources/platform/tools/pg-topology-operator/pkg/config"
 )
 
 // TestGenerate_PropagateCryptoErrors test propagating errors

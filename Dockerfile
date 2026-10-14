@@ -1,5 +1,5 @@
 # Build the manager binary
-FROM --platform=$BUILDPLATFORM docker.lp.rsint.net/golang:1.25 AS builder
+FROM --platform=$BUILDPLATFORM docker.lp.rsint.net/golang:1.27 AS builder
 
 WORKDIR /workspace
 

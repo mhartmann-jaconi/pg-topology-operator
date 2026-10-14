@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	pgapi "github.com/cloudnative-pg/cloudnative-pg/api/v1"
-	"github.com/jaconi-io/ipoque-pg-webhook/pkg/cluster"
 	. "github.com/onsi/gomega"
+	"vcs01.rsint.net/comvidence/sources/platform/tools/pg-topology-operator/pkg/cluster"
 )
 
 // TestEnvtestElection_InitiateSwitchover triggers initiateSwitchover() against

@@ -9,7 +9,7 @@ import (
 	"log/slog"
 	"sync"
 
-	"github.com/jaconi-io/ipoque-pg-webhook/pkg/config"
+	"vcs01.rsint.net/comvidence/sources/platform/tools/pg-topology-operator/pkg/config"
 )
 
 // RegionChangeListener function gets a context and the name of the new primary

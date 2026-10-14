@@ -8,15 +8,15 @@ import (
 	"time"
 
 	pgapi "github.com/cloudnative-pg/cloudnative-pg/api/v1"
-	"github.com/jaconi-io/ipoque-pg-webhook/pkg/cluster"
-	"github.com/jaconi-io/ipoque-pg-webhook/pkg/config"
-	"github.com/jaconi-io/ipoque-pg-webhook/pkg/events"
 	. "github.com/onsi/gomega"
 	"github.com/spf13/viper"
 	"github.com/thejerf/slogassert"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"vcs01.rsint.net/comvidence/sources/platform/tools/pg-topology-operator/pkg/cluster"
+	"vcs01.rsint.net/comvidence/sources/platform/tools/pg-topology-operator/pkg/config"
+	"vcs01.rsint.net/comvidence/sources/platform/tools/pg-topology-operator/pkg/events"
 )
 
 var clus *Cluster

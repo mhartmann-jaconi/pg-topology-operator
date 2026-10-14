@@ -7,12 +7,12 @@ import (
 	"time"
 
 	pgapi "github.com/cloudnative-pg/cloudnative-pg/api/v1"
-	nodes "github.com/jaconi-io/ipoque-pg-webhook/pkg/cluster"
-	"github.com/jaconi-io/ipoque-pg-webhook/pkg/events"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/util/retry"
+	nodes "vcs01.rsint.net/comvidence/sources/platform/tools/pg-topology-operator/pkg/cluster"
+	"vcs01.rsint.net/comvidence/sources/platform/tools/pg-topology-operator/pkg/events"
 )
 
 // changePrimaryInstances will change the desired primary instance for all PG clusters

@@ -10,10 +10,10 @@ import (
 	"time"
 
 	"github.com/h2non/gock"
-	"github.com/jaconi-io/ipoque-pg-webhook/pkg/config"
 	. "github.com/onsi/gomega"
 	"github.com/thejerf/slogassert"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"vcs01.rsint.net/comvidence/sources/platform/tools/pg-topology-operator/pkg/config"
 )
 
 var (

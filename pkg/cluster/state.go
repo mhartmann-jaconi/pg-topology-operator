@@ -6,8 +6,8 @@ import (
 	"log/slog"
 	"sync"
 
-	"github.com/jaconi-io/ipoque-pg-webhook/pkg/config"
-	"github.com/jaconi-io/ipoque-pg-webhook/pkg/events"
+	"vcs01.rsint.net/comvidence/sources/platform/tools/pg-topology-operator/pkg/config"
+	"vcs01.rsint.net/comvidence/sources/platform/tools/pg-topology-operator/pkg/events"
 )
 
 // map of node names to their region

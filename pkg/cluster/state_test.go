@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jaconi-io/ipoque-pg-webhook/pkg/events"
 	. "github.com/onsi/gomega"
+	"vcs01.rsint.net/comvidence/sources/platform/tools/pg-topology-operator/pkg/events"
 )
 
 func TestStore(t *testing.T) {

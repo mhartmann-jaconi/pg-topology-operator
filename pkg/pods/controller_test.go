@@ -5,9 +5,6 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/jaconi-io/ipoque-pg-webhook/pkg/cluster"
-	"github.com/jaconi-io/ipoque-pg-webhook/pkg/events"
-	postgres "github.com/jaconi-io/ipoque-pg-webhook/pkg/postgres"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -15,6 +12,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"vcs01.rsint.net/comvidence/sources/platform/tools/pg-topology-operator/pkg/cluster"
+	"vcs01.rsint.net/comvidence/sources/platform/tools/pg-topology-operator/pkg/events"
+	postgres "vcs01.rsint.net/comvidence/sources/platform/tools/pg-topology-operator/pkg/postgres"
 )
 
 var nodeName = "node"

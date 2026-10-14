@@ -8,10 +8,10 @@ import (
 	"testing"
 
 	pgapi "github.com/cloudnative-pg/cloudnative-pg/api/v1"
-	"github.com/jaconi-io/ipoque-pg-webhook/pkg/cluster"
-	"github.com/jaconi-io/ipoque-pg-webhook/pkg/config"
-	"github.com/jaconi-io/ipoque-pg-webhook/pkg/events"
 	"github.com/thejerf/slogassert"
+	"vcs01.rsint.net/comvidence/sources/platform/tools/pg-topology-operator/pkg/cluster"
+	"vcs01.rsint.net/comvidence/sources/platform/tools/pg-topology-operator/pkg/config"
+	"vcs01.rsint.net/comvidence/sources/platform/tools/pg-topology-operator/pkg/events"
 
 	. "github.com/onsi/gomega"
 	v1 "k8s.io/api/core/v1"

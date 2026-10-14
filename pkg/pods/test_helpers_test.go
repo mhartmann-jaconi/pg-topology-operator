@@ -10,9 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jaconi-io/ipoque-pg-webhook/pkg/cluster"
-	"github.com/jaconi-io/ipoque-pg-webhook/pkg/config"
-	postgres "github.com/jaconi-io/ipoque-pg-webhook/pkg/postgres"
 	. "github.com/onsi/gomega"
 	"github.com/spf13/viper"
 	corev1 "k8s.io/api/core/v1"
@@ -26,6 +23,9 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	ctrlwebhook "sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
+	"vcs01.rsint.net/comvidence/sources/platform/tools/pg-topology-operator/pkg/cluster"
+	"vcs01.rsint.net/comvidence/sources/platform/tools/pg-topology-operator/pkg/config"
+	postgres "vcs01.rsint.net/comvidence/sources/platform/tools/pg-topology-operator/pkg/postgres"
 )
 
 // --- Shared envtest infrastructure for pod webhook tests ---

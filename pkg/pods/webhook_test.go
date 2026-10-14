@@ -9,14 +9,14 @@ import (
 	"os"
 
 	pgapi "github.com/cloudnative-pg/cloudnative-pg/api/v1"
-	"github.com/jaconi-io/ipoque-pg-webhook/pkg/cluster"
-	"github.com/jaconi-io/ipoque-pg-webhook/pkg/config"
-	postgres "github.com/jaconi-io/ipoque-pg-webhook/pkg/postgres"
 	. "github.com/onsi/gomega"
 	"github.com/spf13/viper"
 	"github.com/thejerf/slogassert"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"vcs01.rsint.net/comvidence/sources/platform/tools/pg-topology-operator/pkg/cluster"
+	"vcs01.rsint.net/comvidence/sources/platform/tools/pg-topology-operator/pkg/config"
+	postgres "vcs01.rsint.net/comvidence/sources/platform/tools/pg-topology-operator/pkg/postgres"
 )
 
 var webhook = defaulter{}

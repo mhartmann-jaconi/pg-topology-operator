@@ -11,7 +11,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/jaconi-io/ipoque-pg-webhook/pkg/config"
+	"vcs01.rsint.net/comvidence/sources/platform/tools/pg-topology-operator/pkg/config"
 )
 
 // just use a high number here, which is bigger than the max amount of

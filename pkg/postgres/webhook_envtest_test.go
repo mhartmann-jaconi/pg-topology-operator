@@ -3,8 +3,8 @@ package postgres
 import (
 	"testing"
 
-	"github.com/jaconi-io/ipoque-pg-webhook/pkg/cluster"
 	. "github.com/onsi/gomega"
+	"vcs01.rsint.net/comvidence/sources/platform/tools/pg-topology-operator/pkg/cluster"
 )
 
 func TestEnvtestWebhook_AutomatedDRFailback(t *testing.T) {

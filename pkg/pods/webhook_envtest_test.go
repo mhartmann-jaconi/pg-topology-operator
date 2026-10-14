@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/jaconi-io/ipoque-pg-webhook/pkg/cluster"
-	postgres "github.com/jaconi-io/ipoque-pg-webhook/pkg/postgres"
 	. "github.com/onsi/gomega"
+	"vcs01.rsint.net/comvidence/sources/platform/tools/pg-topology-operator/pkg/cluster"
+	postgres "vcs01.rsint.net/comvidence/sources/platform/tools/pg-topology-operator/pkg/postgres"
 )
 
 // TestEnvtestPodWebhook_NodeSelectorInjection creates a PG replica pod and verifies

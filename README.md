@@ -29,37 +29,26 @@ The **cluster webhook** intercepts PG cluster status changes and checks if it ne
 helm install pg-topology helm -n cnpg-system
 ```
 
-## Build and push
+## Releases
 
-### docker
+The build pipeline separate steps, one for `docker`and one for `helm`. It extracts the desired version for helm chart and docker container from `helm/Chart.yaml`:
+```
+...
+version: "0.5.6"
+appVersion: "v0.11.1"
+```
+This would try to build a docker container in version `v0.11.1` and a helm chart in version `0.5.6`.
 
-```
-DOCKER_TAG="v0.11.1"
-docker build . -f Dockerfile -t docker.lp.rsint.net/platform/pg-topology-operator:$DOCKER_TAG --label com.ipoque.version=$DOCKER_TAG
-docker push docker.lp.rsint.net/platform/pg-topology-operator:$DOCKER_TAG
-```
-or
-```
-export AD_USER=...
-export AD_PASSWORD=...
-make DOCKER_TAG=v0.11.1 docker-upload
-```
+If the artifacts are already present in this version, the rest of the build process is skipped.
 
-### helm
+After building and publishing artifacts, git-tags are created (again, one for helm, e.g. `chart/0.5.6` and one for docker, e.g. `app/v0.11.1`). Those git tags are then filled with the information from CHANGELOG.md file.
 
-Helm version is managed in `helm/Chart.yaml` file. The docker image version also needs to be referenced there.
+### How To
 
-```
-export AD_USER=...
-export AD_PASSWORD=...
-make helm-upload
-```
+When changing the operator code, you need to define a new version tag in the `helm/Chart.yaml` file under `applicationVersion`. In addition you need to add a new entry for that version in the CHANGELOG.md file, under section `Application (Docker Image)`. Follow the semantics of a [changelog file](https://keepachangelog.com/en/1.1.0/) there.
 
-### Git Tag
+When changing the helm chart you change the `version` string in the chart file and proceed the same way with adding a change in the changelog file, this time under `Helm Chart` section.
 
-```
-make DOCKER_TAG=v0.11.1 git-tag
-```
 
 ## cloudnative-pg behaviour
 ### Setup
