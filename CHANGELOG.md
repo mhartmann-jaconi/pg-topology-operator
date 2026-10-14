@@ -25,7 +25,7 @@ First main release.
 
 ## Helm Chart
 
-### [0.6.0] - 2026-10-04
+### [1.0.1] - 2026-10-04
 
 #### Changed 
 
