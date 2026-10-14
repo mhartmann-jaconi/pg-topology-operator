@@ -1,5 +1,6 @@
 GIT_REMOTE     ?= origin
 CONTAINER_ENGINE ?= docker
+GO_MOD_FLAGS   ?= -mod=vendor
 
 CHANGELOG     := CHANGELOG.md
 CHART_FILE    := helm/Chart.yaml
@@ -47,13 +48,13 @@ print-helm-chart-url:
 
 .PHONY: run
 run: fmt vet
-	go run main.go
+	go run $(GO_MOD_FLAGS) main.go
 
 .PHONY: test
 test: build crds envtest
 	@mkdir -p coverage
 	KUBEBUILDER_ASSETS="$$( $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path )" \
-	go test -race -p 1 ./... -coverprofile coverage/cover.out
+	go test $(GO_MOD_FLAGS) -race -p 1 ./... -coverprofile coverage/cover.out
 
 coverage: test
 	go tool cover -html=coverage/cover.out -o coverage/coverage.html
@@ -62,7 +63,7 @@ coverage: test
 .PHONY: build
 build: fmt vet
 	rm -f bin/operator
-	go build -o bin/operator main.go
+	go build $(GO_MOD_FLAGS) -o bin/operator main.go
 
 .PHONY: fmt
 fmt: mod
@@ -70,7 +71,7 @@ fmt: mod
 
 .PHONY: vet
 vet:
-	go vet ./pkg/...
+	go vet $(GO_MOD_FLAGS) ./pkg/...
 
 .PHONY: mod
 mod:
@@ -93,7 +94,7 @@ docker-upload:
 		echo "Docker image ${DOCKER_IMAGE} already exists in ${DOCKER_REGISTRY}; skipping upload"; \
 		exit 0; \
 	fi; \
-	go test ./...; \
+	go test $(GO_MOD_FLAGS) ./...; \
 	$(CONTAINER_ENGINE) build -f Dockerfile -t ${DOCKER_IMAGE} .; \
 	$(CONTAINER_ENGINE) push ${DOCKER_IMAGE}; \
 	$(MAKE) --no-print-directory git-tag-app

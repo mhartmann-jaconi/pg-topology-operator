@@ -19,9 +19,6 @@ config/*
 # Go workspace file
 go.work
 
-# vendored files
-vendor/**
-
 # editor and IDE paraphernalia
 .idea
 *.iml
