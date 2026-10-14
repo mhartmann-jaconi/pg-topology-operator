@@ -22,16 +22,16 @@ app version check:
   stage: version-check
   image: docker.lp.rsint.net/coc/podman/alpine:3.23
   before_script:
-    - apk add --update make docker-cli
+    - apk add --update make podman
   script:
     - |
       set -e
       APP_VERSION="$(make --no-print-directory print-app-version)"
       DOCKER_IMAGE="$(make --no-print-directory print-docker-image)"
       DOCKER_REGISTRY="$(make --no-print-directory print-docker-registry)"
-      docker login "${DOCKER_REGISTRY}" --username "${AD_USER}" --password "${AD_PASSWORD}"
+      podman login "${DOCKER_REGISTRY}" --username "${AD_USER}" --password "${AD_PASSWORD}"
 
-      if docker manifest inspect "${DOCKER_IMAGE}" >/dev/null 2>&1; then
+      if podman manifest inspect "docker://${DOCKER_IMAGE}" >/dev/null 2>&1; then
         cat > app-release-child.yml <<YAML
       default:
         image: docker.lp.rsint.net/coc/podman/alpine:3.23
@@ -75,10 +75,10 @@ app version check:
       app docker build:
         stage: build
         before_script:
-          - apk add --update make docker-cli
+          - apk add --update make podman
         script:
-          - make docker-build
-          - docker save "$(make --no-print-directory print-docker-image)" -o image.tar
+          - make CONTAINER_ENGINE=podman docker-build
+          - podman save "$(make --no-print-directory print-docker-image)" -o image.tar
         artifacts:
           expire_in: 1h
           paths:
@@ -90,15 +90,15 @@ app version check:
           - job: app docker build
             artifacts: true
         before_script:
-          - apk add --update make docker-cli
+          - apk add --update make podman
         script:
           - |
             set -e
             DOCKER_IMAGE="$(make --no-print-directory print-docker-image)"
             DOCKER_REGISTRY="$(make --no-print-directory print-docker-registry)"
-            docker login "${DOCKER_REGISTRY}" --username "${AD_USER}" --password "${AD_PASSWORD}"
-            docker load -i image.tar
-            docker push "${DOCKER_IMAGE}"
+            podman login "${DOCKER_REGISTRY}" --username "${AD_USER}" --password "${AD_PASSWORD}"
+            podman load -i image.tar
+            podman push "${DOCKER_IMAGE}"
 
       app git tag:
         stage: git-tag

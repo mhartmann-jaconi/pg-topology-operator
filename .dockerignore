@@ -1,0 +1,10 @@
+.git
+.gitignore
+.dockerignore
+
+bin/
+coverage/
+config/crd/bases/
+
+*.tgz
+image.tar

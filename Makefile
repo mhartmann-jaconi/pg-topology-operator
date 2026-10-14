@@ -1,4 +1,5 @@
 GIT_REMOTE     ?= origin
+CONTAINER_ENGINE ?= docker
 
 CHANGELOG     := CHANGELOG.md
 CHART_FILE    := helm/Chart.yaml
@@ -81,20 +82,20 @@ mod:
 
 .PHONY: docker-build
 docker-build:
-	docker login ${DOCKER_REGISTRY} --username ${AD_USER} --password ${AD_PASSWORD}
-	docker build -f Dockerfile -t ${DOCKER_IMAGE} .
+	$(CONTAINER_ENGINE) login ${DOCKER_REGISTRY} --username ${AD_USER} --password ${AD_PASSWORD}
+	$(CONTAINER_ENGINE) build -f Dockerfile -t ${DOCKER_IMAGE} .
 
 .PHONY: docker-upload
 docker-upload:
 	@set -e; \
-	docker login ${DOCKER_REGISTRY} --username ${AD_USER} --password ${AD_PASSWORD}; \
-	if docker manifest inspect ${DOCKER_IMAGE} >/dev/null 2>&1; then \
+	$(CONTAINER_ENGINE) login ${DOCKER_REGISTRY} --username ${AD_USER} --password ${AD_PASSWORD}; \
+	if $(CONTAINER_ENGINE) manifest inspect ${DOCKER_IMAGE} >/dev/null 2>&1; then \
 		echo "Docker image ${DOCKER_IMAGE} already exists in ${DOCKER_REGISTRY}; skipping upload"; \
 		exit 0; \
 	fi; \
 	go test ./...; \
-	docker build -f Dockerfile -t ${DOCKER_IMAGE} .; \
-	docker push ${DOCKER_IMAGE}; \
+	$(CONTAINER_ENGINE) build -f Dockerfile -t ${DOCKER_IMAGE} .; \
+	$(CONTAINER_ENGINE) push ${DOCKER_IMAGE}; \
 	$(MAKE) --no-print-directory git-tag-app
 
 .PHONY: helm-package
