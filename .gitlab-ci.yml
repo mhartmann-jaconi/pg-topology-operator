@@ -2,7 +2,7 @@
 default:
   image: docker.lp.rsint.net/platform/uv:3.12
   tags:
-    - docker
+    - podman
 
 stages:
   - version-check
@@ -65,7 +65,7 @@ app version check:
       default:
         image: docker.lp.rsint.net/coc/podman/alpine:3.23
         tags:
-          - docker
+          - podman
           - internet-proxy
 
       stages:
