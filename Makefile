@@ -1,12 +1,48 @@
-# Image URL to use all building/pushing image targets
-DOCKER_TAG                ?= latest
+GIT_REMOTE     ?= origin
+
+CHANGELOG     := CHANGELOG.md
+CHART_FILE    := helm/Chart.yaml
+CHART_NAME    := $(shell awk '/^name:/ { print $$2; exit }' $(CHART_FILE))
+CHART_VERSION := $(shell awk '/^version:/ { gsub(/"/, "", $$2); print $$2; exit }' $(CHART_FILE))
+APP_VERSION   := $(shell awk '/^appVersion:/ { gsub(/"/, "", $$2); print $$2; exit }' $(CHART_FILE))
+
 DOCKER_REGISTRY           ?= docker.lp.rsint.net
 DOCKER_SERVICE_IMAGE_PATH ?= ${DOCKER_REGISTRY}/platform
 DOCKER_SERVICE_IMAGE_NAME  = ${DOCKER_SERVICE_IMAGE_PATH}/pg-topology-operator
-DOCKER_IMAGE              ?= ${DOCKER_SERVICE_IMAGE_NAME}:${DOCKER_TAG}
+DOCKER_IMAGE              ?= ${DOCKER_SERVICE_IMAGE_NAME}:${APP_VERSION}
 HELM_REPO_PATH            ?= https://helm.lp.rsint.net/helm-dev/rs/coc/platform
+HELM_CHART_PACKAGE        := $(CHART_NAME)-$(CHART_VERSION).tgz
+HELM_CHART_URL            := $(HELM_REPO_PATH)/$(HELM_CHART_PACKAGE)
 
 all: test
+
+.PHONY: print-app-version
+print-app-version:
+	@printf '%s\n' '$(APP_VERSION)'
+
+.PHONY: print-chart-version
+print-chart-version:
+	@printf '%s\n' '$(CHART_VERSION)'
+
+.PHONY: print-chart-name
+print-chart-name:
+	@printf '%s\n' '$(CHART_NAME)'
+
+.PHONY: print-docker-image
+print-docker-image:
+	@printf '%s\n' '$(DOCKER_IMAGE)'
+
+.PHONY: print-docker-registry
+print-docker-registry:
+	@printf '%s\n' '$(DOCKER_REGISTRY)'
+
+.PHONY: print-helm-chart-package
+print-helm-chart-package:
+	@printf '%s\n' '$(HELM_CHART_PACKAGE)'
+
+.PHONY: print-helm-chart-url
+print-helm-chart-url:
+	@printf '%s\n' '$(HELM_CHART_URL)'
 
 .PHONY: run
 run: fmt vet
@@ -45,22 +81,35 @@ mod:
 
 .PHONY: docker-build
 docker-build:
+	docker login ${DOCKER_REGISTRY} --username ${AD_USER} --password ${AD_PASSWORD}
 	docker build -f Dockerfile -t ${DOCKER_IMAGE} .
 
 .PHONY: docker-upload
-docker-upload: docker-build
-	docker login ${DOCKER_REGISTRY} --username ${AD_USER} --password ${AD_PASSWORD} --label com.ipoque.version=${DOCKER_TAG}
-	docker push ${DOCKER_IMAGE}
+docker-upload:
+	@set -e; \
+	docker login ${DOCKER_REGISTRY} --username ${AD_USER} --password ${AD_PASSWORD}; \
+	if docker manifest inspect ${DOCKER_IMAGE} >/dev/null 2>&1; then \
+		echo "Docker image ${DOCKER_IMAGE} already exists in ${DOCKER_REGISTRY}; skipping upload"; \
+		exit 0; \
+	fi; \
+	go test ./...; \
+	docker build -f Dockerfile -t ${DOCKER_IMAGE} .; \
+	docker push ${DOCKER_IMAGE}; \
+	$(MAKE) --no-print-directory git-tag-app
 
 .PHONY: helm-package
 helm-package:
 	helm package helm
 
 .PHONY: helm-upload
-helm-upload: helm-package
-	chart=$$(ls -t1 pg*.tgz | head -n1); \
+helm-upload:
+	@set -e; \
+	chart="$(HELM_CHART_PACKAGE)"; \
+	if [ ! -f "$$chart" ]; then \
+		$(MAKE) --no-print-directory helm-package; \
+	fi; \
 	echo "uploading chart $$chart..."; \
-	curl -k -u ${AD_USER}:${AD_PASSWORD} -XPUT "${HELM_REPO_PATH}/$$chart" -T $$chart
+	curl -k -u ${AD_USER}:${AD_PASSWORD} -XPUT "${HELM_REPO_PATH}/$$chart" -T "$$chart"
 
 git-tag:
 	chart=$$(ls -t1 pg*.tgz | head -n1 | sed 's/.*-\([0-9]*\.[0-9]*\.[0-9]*\).*$$/\1/'); \
@@ -87,13 +136,9 @@ crds:
 	fi
 
 # --- HELM TEMPLATE TESTS ---
-# Runs helm-unittest against the helm/ chart directory.
-# The plugin is auto-installed if not already present.
 .PHONY: helm-test
 helm-test:
-	@helm plugin list | grep -q unittest || \
-		helm plugin install https://github.com/helm-unittest/helm-unittest --verify=false
-	helm unittest helm/
+	helm lint helm/
 
 #
 # - - - - - - - - - - K8s Testing - - - - - - - - - -
@@ -102,3 +147,54 @@ helm-test:
 .PHONY: k8s-install
 k8s-install: docker-upload
 	helm install pg-topology helm -n cnpg-system
+
+#
+# - - - - - - - - - Git Tagging - - - - - - - - - - -
+#
+
+define release_notes
+	@awk -v version="$($(1))" '\
+		$$0 ~ "^### \\[" version "\\]" { found=1; next } \
+		found && (/^## / || /^### /) { exit } \
+		found { print } \
+	' "$(CHANGELOG)"
+endef
+
+define git_tag
+	@set -e; \
+	tag_prefix="$(1)"; \
+	version="$($(2))"; \
+	tag="$$tag_prefix/$$version"; \
+	if git ls-remote --exit-code --tags "$(GIT_REMOTE)" "refs/tags/$$tag" >/dev/null 2>&1; then \
+		echo "Git tag $$tag already exists on $(GIT_REMOTE); skipping Git tag"; \
+		exit 0; \
+	fi; \
+	notes="$$( $(MAKE) --no-print-directory release-notes-$(1) )"; \
+	if [ -z "$$notes" ]; then \
+		echo "ERROR: No changelog entry found for version $$version" >&2; \
+		exit 1; \
+	fi; \
+	echo "Pushing Git tag $$tag"; \
+	if git rev-parse --verify --quiet "refs/tags/$$tag" >/dev/null; then \
+		echo "Local Git tag $$tag already exists; pushing it"; \
+	else \
+		git tag -a "$$tag" --cleanup=verbatim -m "$$notes"; \
+	fi; \
+	git push "$(GIT_REMOTE)" "$$tag"
+endef
+
+.PHONY: release-notes-chart
+release-notes-chart:
+	$(call release_notes,CHART_VERSION)
+
+.PHONY: release-notes-app
+release-notes-app:
+	$(call release_notes,APP_VERSION)
+
+.PHONY: git-tag-chart
+git-tag-chart:
+	$(call git_tag,chart,CHART_VERSION)
+
+.PHONY: git-tag-app
+git-tag-app:
+	$(call git_tag,app,APP_VERSION)

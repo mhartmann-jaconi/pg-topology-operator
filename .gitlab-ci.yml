@@ -1,41 +1,253 @@
-stages:
-  - build
-
-variables:
-  APP_NAME: "pg-topology-operator"
-  DOCKER_REGISTRY: "docker.lp.rsint.net"
-
-# TODO create git tag for merge to main
-
-docker:
-  # Step more or less copied from https://confluence.rsint.net/spaces/PLTMNT/pages/1142282258/Building+Images
-  stage: build
-  image:
-    name: docker.lp.rsint.net/coc/kaniko-rs:latest
-    entrypoint: [""]
+---
+default:
+  image: docker.lp.rsint.net/platform/uv:3.12
   tags:
-    - docker
-    - non-privileged
-  before_script:
-    # TODO get an actual image tag
-    - DOCKER_IMAGE=${DOCKER_REGISTRY}/platform/${APP_NAME}:latest
-    - mkdir -p /kaniko/.docker
-    - echo "{\"auths\":{\"docker.lp.rsint.net\":{\"username\":\"$USERNAME\",\"password\":\"$PASSWORD\"}}}" > /kaniko/.docker/config.json
-  script:
-    - echo "Building $DOCKER_IMAGE"
-    # TODO on release tag, push to oci.com-releases02.lp.rsint.net
-    #  we would also need to check access rights of gitlab jobs
-    #  manual push described here: https://confluence.rsint.net/spaces/PLTMNT/pages/1304118227/Harbor
-    - /kaniko/executor -v info --context $CI_PROJECT_DIR --dockerfile $CI_PROJECT_DIR/Dockerfile --destination $DOCKER_IMAGE
+    - podman
 
-# TODO solve helm package an push somehow
-#  Target for releases: helm.com-releases02.lp.rsint.net
-#  Standard target: helm.lp.rsint.net/helm-dev/rs/coc/platform
-#helm:
-#  stage: build
-#  script:
-#    - make helm-package
-#    - make helm-upload
-#  artifacts:
-#    paths:
-#      - build
+stages:
+  - version-check
+  - app-release
+  - helm-release
+  - test
+  - build
+  - deploy
+  - git-tag
+
+workflow:
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+
+app version check:
+  stage: version-check
+  image: docker.lp.rsint.net/coc/podman/alpine:3.23
+  before_script:
+    - apk add --update make docker-cli
+  script:
+    - |
+      set -e
+      APP_VERSION="$(make --no-print-directory print-app-version)"
+      DOCKER_IMAGE="$(make --no-print-directory print-docker-image)"
+      DOCKER_REGISTRY="$(make --no-print-directory print-docker-registry)"
+      docker login "${DOCKER_REGISTRY}" --username "${AD_USER}" --password "${AD_PASSWORD}"
+
+      if docker manifest inspect "${DOCKER_IMAGE}" >/dev/null 2>&1; then
+        cat > app-release-child.yml <<YAML
+      default:
+        image: docker.lp.rsint.net/coc/podman/alpine:3.23
+        tags:
+          - podman
+
+      stages:
+        - done
+
+      app release skipped:
+        stage: done
+        script:
+          - echo "Docker image ${DOCKER_IMAGE} for APP_VERSION ${APP_VERSION} already exists; skipping app release."
+      YAML
+      else
+        cat > app-release-child.yml <<'YAML'
+      default:
+        image: docker.lp.rsint.net/coc/podman/alpine:3.23
+        tags:
+          - podman
+
+      stages:
+        - test
+        - build
+        - deploy
+        - git-tag
+
+      app test:
+        stage: test
+        before_script:
+          - apk add --update go
+        script:
+          - go test ./...
+
+      app docker build:
+        stage: build
+        needs:
+          - job: app test
+            artifacts: false
+        before_script:
+          - apk add --update make docker-cli
+        script:
+          - make docker-build
+          - docker save "$(make --no-print-directory print-docker-image)" -o image.tar
+        artifacts:
+          expire_in: 1h
+          paths:
+            - image.tar
+
+      app docker push:
+        stage: deploy
+        needs:
+          - job: app docker build
+            artifacts: true
+        before_script:
+          - apk add --update make docker-cli
+        script:
+          - |
+            set -e
+            DOCKER_IMAGE="$(make --no-print-directory print-docker-image)"
+            DOCKER_REGISTRY="$(make --no-print-directory print-docker-registry)"
+            docker login "${DOCKER_REGISTRY}" --username "${AD_USER}" --password "${AD_PASSWORD}"
+            docker load -i image.tar
+            docker push "${DOCKER_IMAGE}"
+
+      app git tag:
+        stage: git-tag
+        needs:
+          - job: app docker push
+            artifacts: false
+        before_script:
+          - apk add --update make git
+          - git config user.name "GitLab CI"
+          - git config user.email "gitlab-ci@${CI_SERVER_HOST}"
+          - git remote set-url origin "https://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
+        script:
+          - make git-tag-app
+      YAML
+      fi
+  artifacts:
+    expire_in: 1h
+    when: always
+    paths:
+      - app-release-child.yml
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+
+helm version check:
+  stage: version-check
+  image: docker.lp.rsint.net/coc/podman/alpine:3.23
+  before_script:
+    - apk add --update make curl
+  script:
+    - |
+      set -e
+      CHART_VERSION="$(make --no-print-directory print-chart-version)"
+      HELM_CHART_PACKAGE="$(make --no-print-directory print-helm-chart-package)"
+      HELM_CHART_URL="$(make --no-print-directory print-helm-chart-url)"
+      http_code="$(curl -k -sSL -o /dev/null -w "%{http_code}" -u "${AD_USER}:${AD_PASSWORD}" "${HELM_CHART_URL}")"
+
+      if [ "${http_code}" = "200" ]; then
+        cat > helm-release-child.yml <<YAML
+      default:
+        image: docker.lp.rsint.net/coc/podman/alpine:3.23
+        tags:
+          - podman
+
+      stages:
+        - done
+
+      helm release skipped:
+        stage: done
+        script:
+          - echo "Helm chart ${HELM_CHART_PACKAGE} for CHART_VERSION ${CHART_VERSION} already exists; skipping helm release."
+      YAML
+      elif [ "${http_code}" = "404" ]; then
+        cat > helm-release-child.yml <<'YAML'
+      default:
+        image: docker.lp.rsint.net/coc/podman/alpine:3.23
+        tags:
+          - podman
+
+      stages:
+        - lint
+        - package
+        - deploy
+        - git-tag
+
+      helm lint:
+        stage: lint
+        before_script:
+          - apk add --update make helm
+        script:
+          - make helm-test
+
+      helm package:
+        stage: package
+        needs:
+          - job: helm lint
+            artifacts: false
+        before_script:
+          - apk add --update make helm
+        script:
+          - make helm-package
+        artifacts:
+          expire_in: 1h
+          paths:
+            - "*.tgz"
+
+      helm upload:
+        stage: deploy
+        needs:
+          - job: helm package
+            artifacts: true
+        before_script:
+          - apk add --update make curl
+        script:
+          - make helm-upload
+
+      helm git tag:
+        stage: git-tag
+        needs:
+          - job: helm upload
+            artifacts: false
+        before_script:
+          - apk add --update make git
+          - git config user.name "GitLab CI"
+          - git config user.email "gitlab-ci@${CI_SERVER_HOST}"
+          - git remote set-url origin "https://gitlab-ci-token:${CI_JOB_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
+        script:
+          - make git-tag-chart
+      YAML
+      else
+        echo "Unexpected HTTP status ${http_code} while checking ${HELM_CHART_URL}" >&2
+        exit 1
+      fi
+  artifacts:
+    expire_in: 1h
+    when: always
+    paths:
+      - helm-release-child.yml
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+
+app release:
+  stage: app-release
+  needs:
+    - job: app version check
+      artifacts: true
+  trigger:
+    include:
+      - artifact: app-release-child.yml
+        job: app version check
+    strategy: depend
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+
+helm release:
+  stage: helm-release
+  needs:
+    - job: helm version check
+      artifacts: true
+  trigger:
+    include:
+      - artifact: helm-release-child.yml
+        job: helm version check
+    strategy: depend
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+
+merge request test:
+  stage: test
+  image: docker.lp.rsint.net/coc/podman/alpine:3.23
+  before_script:
+    - apk add --update make go curl
+  script:
+    - make test
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
