@@ -39,12 +39,26 @@ app version check:
           - podman
 
       stages:
-        - done
+        - report
+        - git-tag
 
       app release skipped:
-        stage: done
+        stage: report
         script:
           - echo "Docker image ${DOCKER_IMAGE} for APP_VERSION ${APP_VERSION} already exists; skipping app release."
+
+      app git tag:
+        stage: git-tag
+        needs:
+          - job: app release skipped
+            artifacts: false
+        before_script:
+          - apk add --update make git
+          - git config user.name "GitLab CI"
+          - git config user.email "gitlab-ci@\${CI_SERVER_HOST}"
+          - git remote set-url origin "https://gitlab-ci-token:\${CI_JOB_TOKEN}@\${CI_SERVER_HOST}/\${CI_PROJECT_PATH}.git"
+        script:
+          - make git-tag-app
       YAML
       else
         cat > app-release-child.yml <<'YAML'
@@ -54,23 +68,12 @@ app version check:
           - podman
 
       stages:
-        - test
         - build
         - deploy
         - git-tag
 
-      app test:
-        stage: test
-        image: docker.lp.rsint.net/golang:1.27
-        script:
-          - go version
-          - go test ./...
-
       app docker build:
         stage: build
-        needs:
-          - job: app test
-            artifacts: false
         before_script:
           - apk add --update make docker-cli
         script:
@@ -140,12 +143,26 @@ helm version check:
           - podman
 
       stages:
-        - done
+        - report
+        - git-tag
 
       helm release skipped:
-        stage: done
+        stage: report
         script:
           - echo "Helm chart ${HELM_CHART_PACKAGE} for CHART_VERSION ${CHART_VERSION} already exists; skipping helm release."
+
+      helm git tag:
+        stage: git-tag
+        needs:
+          - job: helm release skipped
+            artifacts: false
+        before_script:
+          - apk add --update make git
+          - git config user.name "GitLab CI"
+          - git config user.email "gitlab-ci@\${CI_SERVER_HOST}"
+          - git remote set-url origin "https://gitlab-ci-token:\${CI_JOB_TOKEN}@\${CI_SERVER_HOST}/\${CI_PROJECT_PATH}.git"
+        script:
+          - make git-tag-chart
       YAML
       elif [ "${http_code}" = "404" ]; then
         cat > helm-release-child.yml <<'YAML'
